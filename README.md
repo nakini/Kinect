@@ -1,1 +1,4 @@
 # Kinect
+convertRawDepth2ply.m -- This function reads the text files which contain the raw depth and converts them into a ply file. It also creates XYZ, Nor, Tri files for 3D model creation.
+depth2World.m -- This function converts the depth values in meters to world coordinates. The input is a MxN matrix and the out will be M*Nx3 matrix. To convert the depth into world coordiantes we need the instrinsic parameters of the depth camera. And if we want to translate them to the RGB camera frame we also need extrinsic parameters.
+rawDepth2Meters.m -- This function takes the depth data capctured from the kinect and convets them into depth in meters. The depth data should be a MxN matrix and the output will also be a MxN matrix. Additionally, make sure the depth data is the raw-data, i.e, it has not been preprocessed and the values range from 0 through 2047 (i.e., 11 bits).
