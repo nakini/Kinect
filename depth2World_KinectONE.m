@@ -1,4 +1,4 @@
-function [Xw, Yw, Zw] = depth2World_KinectONE(depthInMeters, maxDepth)
+function [Xw, Yw, Zw] = depth2World_KinectONE(fileName, maxDepth)
 % This function converts the depth values in meters to world coordinates. The input is a
 % MxN matrix and the out will be M*Nx3 matrix. To convert the depth into world coordiantes
 % we need the instrinsic parameters of the depth camera. And if we want to translate them
@@ -22,7 +22,7 @@ p2=0;
 
 % Read the depth image:
 % fileName = '~/Desktop/Data/Tushar_Thang/Data/20161116/2016-11-15-13hr-7min/depthImg_0261.ppm';
-fileName = '~/Desktop/Data/TestData/blah/depthImg_0018.ppm';
+% fileName = '~/Desktop/Data/TestData/blah/depthImg_0018.ppm';
 imgPixels = imread(fileName);
 imgPixels = imgPixels (:, end:-1:1);
 x3D = zeros(size(imgPixels));
@@ -38,17 +38,17 @@ for r=1:424
         %y3D= (v - cy_d) * z3D / fy_d;
 %         z3D(r,c) = double(imgPixels(r,c)) / 1000;
         d = double(imgPixels(r,c)) / 1000;
-        u = (c - cx)/fx;
-        v = (r - cy)/fy;
-        z3D(r,c) = sqrt(d^2/(u^2+v^2));
-        
+%         u = (c - cx)/fx;
+%         v = (r - cy)/fy;
+%         z3D(r,c) = sqrt(d^2/(u^2+v^2));
+        z3D(r,c) = d;
         x3D(r,c) = (c - cx) * z3D(r,c) / fx;
         y3D(r,c) = (r - cy) * z3D(r,c) / fy;
     end
 end
 
 % Remove all the points which are beyond the required depth.
-indxValid = z3D > 0.5 & z3D < depthInMeters;
+indxValid = z3D > 0.5 & z3D < maxDepth;
 
 Xw = x3D(indxValid);
 Yw = y3D(indxValid);
