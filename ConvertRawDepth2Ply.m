@@ -1,4 +1,4 @@
-function convertRawDepth2ply(dirName, maxDepthInMeters, startIndx, numPCs, ...
+function ConvertRawDepth2ply(dirName, maxDepthInMeters, startIndx, numPCs, ...
     samplingRate, Mode)
 % This function reads the text files which contain the raw depth and converts them into a
 % ply file. It also creates XYZ, Nor, Tri files for 3D model creation.
@@ -56,7 +56,7 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
     end
     
     % Convert the raw depth into depth in meters.
-    depthInMeters = rawDepth2Meters(depthRaw);
+    depthInMeters = RawDepth2Meters(depthRaw);
         
     % Now, get the X, Y, Z of each point in a world coordinate frame.
     [Xw Yw Zw] = depth2World(depthInMeters, maxDepthInMeters);

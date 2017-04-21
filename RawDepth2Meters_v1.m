@@ -1,4 +1,4 @@
-function depthInMeters = rawDepth2Meters(depthValue)
+function depthInMeters = RawDepth2Meters_v1(depthValue)
 % This function takes the depth data capctured from the kinect and convets them into depth
 % in meters. The depth data should be a MxN matrix and the output will also be a MxN
 % matrix. Additionally, make sure the depth data is the raw-data, i.e, it has not been

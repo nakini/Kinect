@@ -1,4 +1,4 @@
-function [Xw, Yw, Zw] = depth2World(depthInMeters, maxDepth)
+function [Xw, Yw, Zw] = Depth2World_v1(depthInMeters, maxDepth)
 % This function converts the depth values in meters to world coordinates. The input is a
 % MxN matrix and the out will be M*Nx3 matrix. To convert the depth into world coordiantes
 % we need the instrinsic parameters of the depth camera. And if we want to translate them
