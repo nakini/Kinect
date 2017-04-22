@@ -1,13 +1,14 @@
-function ConvertRawDepth2ply(dirName, maxDepthInMeters, startIndx, numPCs, ...
+function ConvertRawDepth2Ply_v1(dirName, maxDepthInMeters, startIndx, numPCs, ...
     samplingRate, Mode)
-% This function reads the text files which contain the raw depth and converts them into a
-% ply file. It also creates XYZ, Nor, Tri files for 3D model creation.
+% This function reads the text files which contain the raw depth and converts 
+% them into a ply file. It also creates XYZ, Nor, Tri files for 3D model 
+% creation.
 % 
 % INPUT:
 %   dirName = Directory name containing the raw text files.
 %   maxDepthInMeters = Point beyond this maximum depth will
-%   startIndx = Starting number of the file which will be included in the complete 3D point
-%       cloud.
+%   startIndx = Starting number of the file which will be included in the 
+%       complete 3D point cloud.
 %   numPCs = Total number of point clouds from which the 3D model will be created.
 %   samplingRate = The difference between two consequtive images.
 %   Mode = Now this program can read both text and image files. 
@@ -17,7 +18,7 @@ function ConvertRawDepth2ply(dirName, maxDepthInMeters, startIndx, numPCs, ...
 %
 % OUTPUTs:
 %
-% Example: convertRawDepth2ply('~/Desktop/test_images_July11_dusk/', 1.5, 1, 100, 2)
+% Example: ConvertRawDepth2Ply_v1('~/Desktop/test_images_July11_dusk/', 1.5, 1, 100, 2)
 
 if (nargin < 4)
     % First get all the depth image files inside the directory.
@@ -40,13 +41,13 @@ end
 system(sprintf('mkdir %s/PCinPLY', dirName));
 system(sprintf('mkdir %s/PCinXYZNorTri', dirName));
 
-% For each name given in the list read the text file and convert the raw depth into a X,
-% Y, and Z coordinates and then create a ply file from the coordinates. In the store the
-% ply file in the newly created directory.
+% For each name given in the list read the text file and convert the raw depth 
+% into a X, Y, and Z coordinates and then create a ply file from the coordinates. 
+% In the store the ply file in the newly created directory.
 for iNTF=startIndx:samplingRate:startIndx+numPCs-1
     if Mode == 1
-        % Read the text file. Each text file contains a series of float values, seperated 
-        % by a ','.
+        % Read the text file. Each text file contains a series of float values, 
+        % seperated by a ','.
         txtFileName = sprintf('rawDepth%d.txt', iNTF);
         depthRaw = textread([dirName, '/', txtFileName], '', 'delimiter', ',');
     elseif Mode == 2
@@ -56,10 +57,10 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
     end
     
     % Convert the raw depth into depth in meters.
-    depthInMeters = RawDepth2Meters(depthRaw);
+    depthInMeters = RawDepth2Meters_v1(depthRaw);
         
     % Now, get the X, Y, Z of each point in a world coordinate frame.
-    [Xw Yw Zw] = depth2World(depthInMeters, maxDepthInMeters);
+    [Xw, Yw, Zw] = Depth2World_v1(depthInMeters, maxDepthInMeters);
 %     dataXYZ = cat(2, Xw, Yw, Zw);
     dataXYZ = cat(2, Xw, Yw-maxDepthInMeters, Zw);
     
