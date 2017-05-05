@@ -1,5 +1,5 @@
-function ConvertRawDepth2Ply_v1(dirName, maxDepthInMeters, startIndx, numPCs, ...
-    samplingRate, Mode)
+function ConvertRawDepth2Ply_v1(dirName, maxDepthInMeters, startIndx, ...
+    numPCs, samplingRate, Mode)
 % This function reads the text files which contain the raw depth and converts 
 % them into a ply file. It also creates XYZ, Nor, Tri files for 3D model 
 % creation.
@@ -9,7 +9,8 @@ function ConvertRawDepth2Ply_v1(dirName, maxDepthInMeters, startIndx, numPCs, ..
 %   maxDepthInMeters = Point beyond this maximum depth will
 %   startIndx = Starting number of the file which will be included in the 
 %       complete 3D point cloud.
-%   numPCs = Total number of point clouds from which the 3D model will be created.
+%   numPCs = Total number of point clouds from which the 3D model will be 
+%       created.
 %   samplingRate = The difference between two consequtive images.
 %   Mode = Now this program can read both text and image files. 
 %       1 -- text files (Not a good idea to store image as a text file.
@@ -18,23 +19,24 @@ function ConvertRawDepth2Ply_v1(dirName, maxDepthInMeters, startIndx, numPCs, ..
 %
 % OUTPUTs:
 %
-% Example: ConvertRawDepth2Ply_v1('~/Desktop/test_images_July11_dusk/', 1.5, 1, 100, 2)
+% Example: ConvertRawDepth2Ply_v1('~/Desktop/test_images_July11_dusk/', 
+%               1.5, 1, 100, 2)
 
 if (nargin < 4)
     % First get all the depth image files inside the directory.
     listTxtFiles = dir([dirName, '/*.ppm']);
     numPCs = length(listTxtFiles);
     
-    % Sampling rate -- Using kinect we can grab a lot a images but we don't need all 
-    % of them to create the complete point cloud. So, take only few samples from the 
-    % whole data set.
+    % Sampling rate -- Using kinect we can grab a lot a images but we don't need
+    % all of them to create the complete point cloud. So, take only few samples
+    % from the whole data set.
     samplingRate = 1;
     
     % Read image files.
     Mode = 2;
 else
-    error(['At least provide directory name containing the images, maximum depth to be'
-            ' captured and starting image number']);
+    error(['At least provide directory name containing the images, maximum depth'
+            ' to be captured and starting image number']);
 end
 
 % Make a directory to store the ply files.
@@ -75,8 +77,8 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
         fileName = [dirName, '/PCinPLY/', nameWithoutExt];
         pc2ply(fileName, dataXYZ);
         
-        % Create XYZ, Nor and Tri files for each point cloud which could be used to 
-        % register to with each other to create a complete 3D point cloud.
+        % Create XYZ, Nor and Tri files for each point cloud which could be used 
+        % to register to with each other to create a complete 3D point cloud.
         binDir = [dirName, '/PCinXYZNorTri/'];
         createXYZTriNor(dataXYZ, binDir, iNTF);
     end
