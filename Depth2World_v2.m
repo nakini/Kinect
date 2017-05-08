@@ -9,8 +9,8 @@ if (nargin < 1)
     maxDepth = 3;
 end
 
-% Extrinsic parameters of the depth camera. These values are collected from the dicussion
-% forum.
+% Extrinsic parameters of the depth camera. These values are collected from the
+% dicussion forum.
 fx=367.286994337726;        % Focal length in X and Y
 fy=367.286855347968;
 cx=255.165695200749;        % Principle point in X and Y
@@ -22,7 +22,8 @@ p1=0;
 p2=0;
 
 % Read the depth image:
-% fileName = '~/Desktop/Data/Tushar_Thang/Data/20161116/2016-11-15-13hr-7min/depthImg_0261.ppm';
+% fileName = '~/Desktop/Data/Tushar_Thang/Data/20161116/2016-11-15-13hr-7min/
+%           depthImg_0261.ppm';
 % fileName = '~/Desktop/Data/TestData/blah/depthImg_0018.ppm';
 imgPixels = imread(fileName);
 imgPixels = imgPixels (:, end:-1:1);
@@ -31,7 +32,8 @@ y3D = zeros(size(imgPixels));
 z3D = zeros(size(imgPixels));
 
 % For the depth image the coordinate calculation formula is:
-% 3D coordinates from point cloud using depth value.. in Kinect coordinate space
+% 3D coordinates from point cloud using depth value.. in Kinect coordinate
+% space
 for r=1:424
     for c=1:512
         % The depth value is equal to intensity. But it is stored in mm.
