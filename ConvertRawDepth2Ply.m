@@ -1,21 +1,21 @@
-function ConvertRawDepth2Ply_v1(dirName, maxDepthInMeters, startIndx, ...
-    numPCs, samplingRate, Mode)
+function ConvertRawDepth2Ply(dirName, maxDepthInMeters, startIndx, ...
+                            numPCs, samplingRate, KinectType, Mode)
 % This function reads the text files which contain the raw depth and converts 
 % them into a ply file. It also creates XYZ, Nor, Tri files for 3D model 
 % creation.
 % 
 % INPUT:
-%   dirName = Directory name containing the raw text files.
-%   maxDepthInMeters = Point beyond this maximum depth will
-%   startIndx = Starting number of the file which will be included in the 
-%       complete 3D point cloud.
-%   numPCs = Total number of point clouds from which the 3D model will be 
-%       created.
-%   samplingRate = The difference between two consequtive images.
-%   Mode = Now this program can read both text and image files. 
-%       1 -- text files (Not a good idea to store image as a text file.
-%       2 -- PPM image (Default)
-%
+%   dirName     : Directory name containing the raw text files.
+%   maxDepthInMeters : Point beyond this maximum depth will be ignored.
+%   startIndx   : Starting number of the file which will be included in the 
+%               complete 3D point cloud.
+%   numPCs      : Total number of point clouds from which the 3D model will be 
+%               created.
+%   samplingRate: The difference between two consequtive images.
+%   KinectType  : Either Kinect-360(v1) or Kinect-ONE(v2)
+%   Mode        : Now this program can read both text and image files. 
+%               1 -- text files (Not a good idea to store image as a text file.
+%               2 -- PPM image (Default)
 %
 % OUTPUTs:
 %
@@ -50,22 +50,30 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
     if Mode == 1
         % Read the text file. Each text file contains a series of float values, 
         % seperated by a ','.
-        txtFileName = sprintf('rawDepth%d.txt', iNTF);
+        txtFileName = sprintf('rawDepth%04d.txt', iNTF);
         depthRaw = textread([dirName, '/', txtFileName], '', 'delimiter', ',');
     elseif Mode == 2
         % Read the ppm files. Each pixel in the ppm file is a depth value.
-        ppmFileName = sprintf('depth%d.ppm', iNTF);
+        ppmFileName = sprintf('depth%04d.ppm', iNTF);
         depthRaw = imread([dirName, '/', ppmFileName]);
     end
     
-    % Convert the raw depth into depth in meters.
-    depthInMeters = RawDepth2Meters_v1(depthRaw);
+    if strcmpi(KinectType, 'v1')
+        % Convert the raw depth into depth in meters.
+        depthInMeters = RawDepth2Meters_v1(depthRaw);        
+        % Now, get the X, Y, Z of each point in a world coordinate frame.
+        [Xw, Yw, Zw] = Depth2World_v1(depthInMeters, maxDepthInMeters);
         
-    % Now, get the X, Y, Z of each point in a world coordinate frame.
-    [Xw, Yw, Zw] = Depth2World_v1(depthInMeters, maxDepthInMeters);
+    elseif strcmpi(KinectType, 'v2')
+        % Now, get the X, Y, Z of each point in a world coordinate frame.
+        [Xw, Yw, Zw] = Depth2World_v2(ppmFileName, maxDepth);
+    end
 %     dataXYZ = cat(2, Xw, Yw, Zw);
     dataXYZ = cat(2, Xw, Yw-maxDepthInMeters, Zw);
     
+    % Check whether the cloud is empty or not. If it is empty then don't create
+    % the point cloud or else create the ply files and the corresponding NOR,
+    % TRI and XYZ.
     if ~isempty(dataXYZ)
         % Create a ply file out of these point.
         % Get rid of the file extension.

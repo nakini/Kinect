@@ -1,8 +1,9 @@
-function [Xw, Yw, Zw] = depth2World_KinectONE(fileName, maxDepth)
-% This function converts the depth values in meters to world coordinates. The input is a
-% MxN matrix and the out will be M*Nx3 matrix. To convert the depth into world coordiantes
-% we need the instrinsic parameters of the depth camera. And if we want to translate them
-% to the RGB camera frame we also need extrinsic parameters.
+function [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepth)
+% This function converts the depth values in meters to world coordinates. The 
+% input is a MxN matrix and the out will be M*Nx3 matrix. To convert the depth 
+% into world coordiantes we need the instrinsic parameters of the depth camera.
+% And if we want to translate them to the RGB camera frame we also need 
+% extrinsic parameters.
 
 if (nargin < 1)
     maxDepth = 3;
@@ -33,10 +34,7 @@ z3D = zeros(size(imgPixels));
 % 3D coordinates from point cloud using depth value.. in Kinect coordinate space
 for r=1:424
     for c=1:512
-        %z3D= image_depth.at<ushort>(Point2d(u,v)) / 1000.0f;
-        %x3D= (u - cx_d) * z3D/ fx_d;
-        %y3D= (v - cy_d) * z3D / fy_d;
-%         z3D(r,c) = double(imgPixels(r,c)) / 1000;
+        % The depth value is equal to intensity. But it is stored in mm.
         d = double(imgPixels(r,c)) / 1000;
 %         u = (c - cx)/fx;
 %         v = (r - cy)/fy;
