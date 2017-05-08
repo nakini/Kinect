@@ -1,5 +1,5 @@
-function ConvertRawDepth2Ply(dirName, maxDepthInMeters, startIndx, ...
-                            numPCs, samplingRate, KinectType, Mode)
+function ConvertRawDepth2Ply(dirName, maxDepthInMeters, KinectType, ...
+                            startIndx, numPCs, samplingRate, Mode)
 % This function reads the text files which contain the raw depth and converts 
 % them into a ply file. It also creates XYZ, Nor, Tri files for 3D model 
 % creation.
@@ -20,23 +20,29 @@ function ConvertRawDepth2Ply(dirName, maxDepthInMeters, startIndx, ...
 % OUTPUTs:
 %
 % Example: ConvertRawDepth2Ply_v1('~/Desktop/test_images_July11_dusk/', 
-%               1.5, 1, 100, 2)
+%       1.5, 1, 100, 2)
 
-if (nargin < 4)
-    % First get all the depth image files inside the directory.
-    listTxtFiles = dir([dirName, '/*.ppm']);
-    numPCs = length(listTxtFiles);
-    
-    % Sampling rate -- Using kinect we can grab a lot a images but we don't need
-    % all of them to create the complete point cloud. So, take only few samples
-    % from the whole data set.
-    samplingRate = 1;
-    
+%------------------------------------------------------------------------------
+%------------------------------- START ----------------------------------------
+% Set the default parameters firs.
+if (nargin < 7)
     % Read image files.
     Mode = 2;
+    if (nargin < 6)
+        % Sampling rate -- Using kinect we can grab a lot a images but we don't 
+        % need all of them to create the complete point cloud. So, take only 
+        % few samples from the whole data set.
+        samplingRate = 1;
+        if (nargin < 5)
+            % First get all the depth image files inside the directory.
+            listTxtFiles = dir([dirName, '/*.ppm']);
+            numPCs = length(listTxtFiles);
+            
+        end
+    end
 else
-    error(['At least provide directory name containing the images, maximum depth'
-            ' to be captured and starting image number']);
+    error(['At least provide directory name containing the images, maximum '
+        'depth to be captured, Kinect type and starting image number']);
 end
 
 % Make a directory to store the ply files.
@@ -44,29 +50,33 @@ system(sprintf('mkdir %s/PCinPLY', dirName));
 system(sprintf('mkdir %s/PCinXYZNorTri', dirName));
 
 % For each name given in the list read the text file and convert the raw depth 
-% into a X, Y, and Z coordinates and then create a ply file from the coordinates. 
-% In the store the ply file in the newly created directory.
+% into a X, Y, and Z coordinates and then create a ply file from the 
+% coordinates. In the store the ply file in the newly created directory.
 for iNTF=startIndx:samplingRate:startIndx+numPCs-1
     if Mode == 1
-        % Read the text file. Each text file contains a series of float values, 
+        % Read the text file. Each text file contains a series of float values,
         % seperated by a ','.
         txtFileName = sprintf('rawDepth%04d.txt', iNTF);
         depthRaw = textread([dirName, '/', txtFileName], '', 'delimiter', ',');
     elseif Mode == 2
         % Read the ppm files. Each pixel in the ppm file is a depth value.
-        ppmFileName = sprintf('depth%04d.ppm', iNTF);
-        depthRaw = imread([dirName, '/', ppmFileName]);
-    end
-    
-    if strcmpi(KinectType, 'v1')
-        % Convert the raw depth into depth in meters.
-        depthInMeters = RawDepth2Meters_v1(depthRaw);        
-        % Now, get the X, Y, Z of each point in a world coordinate frame.
-        [Xw, Yw, Zw] = Depth2World_v1(depthInMeters, maxDepthInMeters);
+        if (strcmpi(KinectType, 'v1'))
+            ppmFileName = sprintf('depth%04d.ppm', iNTF);
+            depthRaw = imread([dirName, '/', ppmFileName]);
+            
+            % Convert the raw depth into depth in meters.
+            depthInMeters = RawDepth2Meters_v1(depthRaw);
+            % Now, get the X, Y, Z of each point in a world coordinate frame.
+            [Xw, Yw, Zw] = Depth2World_v1(depthInMeters, maxDepthInMeters);
+        elseif (strcmpi(KinectType, 'v2'))
+            ppmFileName = sprintf('depthImg_%04d.ppm', iNTF);
+            fileName = [dirName, '/', ppmFileName];
+            % Now, get the X, Y, Z of each point in a world coordinate frame.
+            [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepthInMeters);
+        else
+            error('Kinect type should either v1 or v2')
+        end
         
-    elseif strcmpi(KinectType, 'v2')
-        % Now, get the X, Y, Z of each point in a world coordinate frame.
-        [Xw, Yw, Zw] = Depth2World_v2(ppmFileName, maxDepth);
     end
 %     dataXYZ = cat(2, Xw, Yw, Zw);
     dataXYZ = cat(2, Xw, Yw-maxDepthInMeters, Zw);

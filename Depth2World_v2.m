@@ -34,8 +34,9 @@ z3D = zeros(size(imgPixels));
 % For the depth image the coordinate calculation formula is:
 % 3D coordinates from point cloud using depth value.. in Kinect coordinate
 % space
-for r=1:424
-    for c=1:512
+[maxR, maxC] = size(imgPixels);
+for r=1:maxR
+    for c=1:maxC
         % The depth value is equal to intensity. But it is stored in mm.
         d = double(imgPixels(r,c)) / 1000;
 %         u = (c - cx)/fx;
