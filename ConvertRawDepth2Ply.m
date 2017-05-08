@@ -69,7 +69,7 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
             % Now, get the X, Y, Z of each point in a world coordinate frame.
             [Xw, Yw, Zw] = Depth2World_v1(depthInMeters, maxDepthInMeters);
         elseif (strcmpi(KinectType, 'v2'))
-            ppmFileName = sprintf('depthImg_%04d.ppm', iNTF);
+            ppmFileName = sprintf('depthImg_%04d.png', iNTF);
             fileName = [dirName, '/', ppmFileName];
             % Now, get the X, Y, Z of each point in a world coordinate frame.
             [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepthInMeters);

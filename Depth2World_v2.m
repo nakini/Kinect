@@ -56,4 +56,4 @@ Yw = y3D(indxValid);
 Zw = z3D(indxValid);
 
 % Display the points.
-plot3(Xw, Yw, Zw, '.');
+% plot3(Xw, Yw, Zw, '.');
