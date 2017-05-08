@@ -74,7 +74,7 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
             % Now, get the X, Y, Z of each point in a world coordinate frame.
             [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepthInMeters);
         else
-            error('Kinect type should either v1 or v2')
+            error('Kinect type should either v1 or v2');
         end
         
     end
@@ -90,7 +90,13 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
         if Mode ==1
             nameWithoutExt = strrep(txtFileName, '.txt', '');
         elseif Mode ==2
-            nameWithoutExt = strrep(ppmFileName, '.ppm', '');
+            if (strcmpi(KinectType, 'v1'))
+                nameWithoutExt = strrep(ppmFileName, '.ppm', '');
+            elseif (strcmpi(KinectType, 'v2'))
+                nameWithoutExt = strrep(ppmFileName, '.png', '');
+            else
+                error('Kinect type should either v1 or v2');
+            end
         end
         fileName = [dirName, '/PCinPLY/', nameWithoutExt];
         pc2ply(fileName, dataXYZ);
