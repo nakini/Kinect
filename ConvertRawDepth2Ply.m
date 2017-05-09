@@ -69,10 +69,10 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
             % Now, get the X, Y, Z of each point in a world coordinate frame.
             [Xw, Yw, Zw] = Depth2World_v1(depthInMeters, maxDepthInMeters);
         elseif (strcmpi(KinectType, 'v2'))
-            ppmFileName = sprintf('depthImg_%04d.png', iNTF);
-            fileName = [dirName, '/', ppmFileName];
+            pngFileName = sprintf('depthImg_%04d.png', iNTF);
+            tmpFileName = [dirName, '/', pngFileName];
             % Now, get the X, Y, Z of each point in a world coordinate frame.
-            [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepthInMeters);
+            [Xw, Yw, Zw] = Depth2World_v2(tmpFileName, maxDepthInMeters);
         else
             error('Kinect type should either v1 or v2');
         end
@@ -93,7 +93,7 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
             if (strcmpi(KinectType, 'v1'))
                 nameWithoutExt = strrep(ppmFileName, '.ppm', '');
             elseif (strcmpi(KinectType, 'v2'))
-                nameWithoutExt = strrep(ppmFileName, '.png', '');
+                nameWithoutExt = strrep(pngFileName, '.png', '');
             else
                 error('Kinect type should either v1 or v2');
             end
