@@ -35,7 +35,11 @@ if (nargin < 7)
         samplingRate = 1;
         if (nargin < 5)
             % First get all the depth image files inside the directory.
-            listTxtFiles = dir([dirName, '/*.ppm']);
+            if (strcmpi(KinectType, 'v1'))
+                listTxtFiles = dir([dirName, '/*.ppm']);
+            elseif (strcmpi(KinectType, 'v2'))
+                listTxtFiles = dir([dirName, '/*.png']);
+            end
             numPCs = length(listTxtFiles);
             
         end
