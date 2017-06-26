@@ -103,7 +103,8 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
             end
         end
         fileName = [dirName, '/PCinPLY/', nameWithoutExt];
-        pc2ply(fileName, dataXYZ);
+        pcwrite(pointCloud(dataXYZ), fileName);
+%         pc2ply(fileName, dataXYZ);
         
         % Create XYZ, Nor and Tri files for each point cloud which could be used 
         % to register to with each other to create a complete 3D point cloud.
