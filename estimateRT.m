@@ -1,3 +1,4 @@
 % Read two point clouds and find the rotation and translation using the  
 % corresponding points.
-pt1 = pcread(
+
+% Generate a dummy point cloud.

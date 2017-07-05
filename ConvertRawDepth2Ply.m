@@ -1,5 +1,5 @@
 function ConvertRawDepth2Ply(dirName, maxDepthInMeters, KinectType, ...
-                            startIndx, numPCs, samplingRate, Mode)
+                            startIndx, endIndx, samplingRate, Mode)
 % This function reads the text files which contain the raw depth and converts 
 % them into a ply file. It also creates XYZ, Nor, Tri files for 3D model 
 % creation.
@@ -40,7 +40,7 @@ if (nargin < 7)
             elseif (strcmpi(KinectType, 'v2'))
                 listTxtFiles = dir([dirName, '/*.png']);
             end
-            numPCs = length(listTxtFiles);
+            endIndx = length(listTxtFiles);
             
         end
     end
@@ -56,7 +56,7 @@ system(sprintf('mkdir %s/PCinXYZNorTri', dirName));
 % For each name given in the list read the text file and convert the raw depth 
 % into a X, Y, and Z coordinates and then create a ply file from the 
 % coordinates. In the store the ply file in the newly created directory.
-for iNTF=startIndx:samplingRate:startIndx+numPCs-1
+for iNTF=startIndx:samplingRate:endIndx
     if Mode == 1
         % Read the text file. Each text file contains a series of float values,
         % seperated by a ','.
@@ -66,8 +66,12 @@ for iNTF=startIndx:samplingRate:startIndx+numPCs-1
         % Read the ppm files. Each pixel in the ppm file is a depth value.
         if (strcmpi(KinectType, 'v1'))
             ppmFileName = sprintf('depth%04d.ppm', iNTF);
-            depthRaw = imread([dirName, '/', ppmFileName]);
-            
+            compFileName = [dirName, '/', ppmFileName];
+            if (exist(compFileName, 'file') == 2)
+                depthRaw = imread(compFileName);
+            else
+                continue;
+            end      
             % Convert the raw depth into depth in meters.
             depthInMeters = RawDepth2Meters_v1(depthRaw);
             % Now, get the X, Y, Z of each point in a world coordinate frame.
