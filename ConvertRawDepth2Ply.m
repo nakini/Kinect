@@ -79,8 +79,12 @@ for iNTF=startIndx:samplingRate:endIndx
         elseif (strcmpi(KinectType, 'v2'))
             pngFileName = sprintf('depthImg_%04d.png', iNTF);
             tmpFileName = [dirName, '/', pngFileName];
-            % Now, get the X, Y, Z of each point in a world coordinate frame.
-            [Xw, Yw, Zw] = Depth2World_v2(tmpFileName, maxDepthInMeters);
+            if(exist(tmpFileName, 'file') == 2)
+                % Now, get the X, Y, Z of each point in a world coordinate frame.
+                [Xw, Yw, Zw] = Depth2World_v2(tmpFileName, maxDepthInMeters);
+            else
+                continue;
+            end
         else
             error('Kinect type should either v1 or v2');
         end
@@ -113,6 +117,6 @@ for iNTF=startIndx:samplingRate:endIndx
         % Create XYZ, Nor and Tri files for each point cloud which could be used 
         % to register to with each other to create a complete 3D point cloud.
         binDir = [dirName, '/PCinXYZNorTri/'];
-        createXYZTriNor(dataXYZ, binDir, iNTF);
+%         createXYZTriNor(dataXYZ, binDir, iNTF);
     end
 end
