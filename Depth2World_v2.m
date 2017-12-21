@@ -1,12 +1,27 @@
-function [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepth)
+function [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepth, flyWinSize)
 % This function converts the depth values in meters to world coordinates. The 
 % input is a MxN matrix and the out will be M*Nx3 matrix. To convert the depth 
 % into world coordiantes we need the instrinsic parameters of the depth camera.
 % And if we want to translate them to the RGB camera frame we also need 
 % extrinsic parameters.
+%
+% INPUTs:
+%   fileName: Depth image file name
+%   maxDepth: Maximum depth which is set by the user
+%   flyWinSize: Window size which will be used to get rid of flying pixels
+%
+% OUTPUTs:
+%   Xw, Yw, Zw: X, Y, Z values for each pixel
+%
 
-if (nargin < 1)
-    maxDepth = 3;
+%^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+%------------------------------- START -----------------------------------------
+
+if (nargin < 3)
+    flyWinSize = 2;
+    if (nargin < 2)
+        maxDepth = 3;
+    end
 end
 
 % Extrinsic parameters of the depth camera. These values are collected from the
@@ -26,7 +41,7 @@ p2=0;
 %           depthImg_0261.ppm';
 % fileName = '~/Desktop/Data/TestData/blah/depthImg_0018.ppm';
 imgPixels = imread(fileName);
-imgPixels = imgPixels (:, end:-1:1);
+% imgPixels = imgPixels (:, end:-1:1);
 x3D = zeros(size(imgPixels));
 y3D = zeros(size(imgPixels));
 z3D = zeros(size(imgPixels));
@@ -48,12 +63,33 @@ for r=1:maxR
     end
 end
 
+% Get-rid-of flying pixels using the "window" method. Flying pixel is a inherent
+% problem with the ToF sensors.
+% TODO:
+%   I need to check 2 other mehods where the concept of the normal is being
+%   used to get rid of flying pixels.
+distMat = zeros(size(imgPixels));
+tmpDist = 0;
+for r=3:maxR-2
+    for c=3:maxC-2
+        for y=r-flyWinSize:1:r+flyWinSize
+            for x=c-flyWinSize:1:c+flyWinSize
+                tmpDist = abs(norm([x3D(r,c) - x3D(y,x), y3D(r,c)-y3D(y,x), ...
+                    z3D(r,c)-z3D(y,x)]));
+            end
+        end
+        
+        distMat(r,c) = tmpDist;
+    end
+end
+% Set the threshold to remove all the flying pixels.
+indxNoFlyPixels = (distMat > 0) & (distMat < 0.05);
 % Remove all the points which are beyond the required depth.
 indxValid = z3D > 0.5 & z3D < maxDepth;
 
-Xw = x3D(indxValid);
-Yw = y3D(indxValid);
-Zw = z3D(indxValid);
+Xw = x3D(indxValid & indxNoFlyPixels);
+Yw = y3D(indxValid & indxNoFlyPixels);
+Zw = z3D(indxValid & indxNoFlyPixels);
 
 % Display the points.
 % plot3(Xw, Yw, Zw, '.');
