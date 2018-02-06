@@ -18,7 +18,7 @@ function [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepth, flyWinSize)
 %------------------------------- START -----------------------------------------
 
 if (nargin < 3)
-    flyWinSize = 2;
+    flyWinSize = 3;
     if (nargin < 2)
         maxDepth = 3;
     end
@@ -26,15 +26,27 @@ end
 
 % Extrinsic parameters of the depth camera. These values are collected from the
 % dicussion forum.
-fx=367.286994337726;        % Focal length in X and Y
-fy=367.286855347968;
-cx=255.165695200749;        % Principle point in X and Y
-cy=211.824600345805;
-k1=0.0914203770220268;
-k2=-0.269349746097515;
-k3=0.0925671408453617;
-p1=0;
-p2=0;
+% fx=367.286994337726;        % Focal length in X and Y
+% fy=367.286855347968;
+% cx=255.165695200749;        % Principle point in X and Y
+% cy=211.824600345805;
+% k1=0.0914203770220268;
+% k2=-0.269349746097515;
+% k3=0.0925671408453617;
+% p1=0;
+% p2=0;
+
+% Parameters from the libfreenect2 running in dubug mode while the kinect
+% is plugged in.		
+cx = 262.299194;
+cy = 206.395004;
+fx = 368.053497;
+fy = 368.053497;
+k1 = 0.0842951;
+k2 = -0.271216;
+k3 = 0.10087239;
+p1 = 0;
+p2 = 0;
 
 % Read the depth image:
 % fileName = '~/Desktop/Data/Tushar_Thang/Data/20161116/2016-11-15-13hr-7min/
@@ -70,8 +82,8 @@ end
 %   used to get rid of flying pixels.
 distMat = zeros(size(imgPixels));
 tmpDist = 0;
-for r=3:maxR-2
-    for c=3:maxC-2
+for r=flyWinSize+1:maxR-flyWinSize
+    for c=flyWinSize+1:maxC-flyWinSize
         for y=r-flyWinSize:1:r+flyWinSize
             for x=c-flyWinSize:1:c+flyWinSize
                 tmpDist = abs(norm([x3D(r,c) - x3D(y,x), y3D(r,c)-y3D(y,x), ...
