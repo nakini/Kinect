@@ -1,4 +1,4 @@
-function rgbMapped = Depth2ColorMap_v2(rgbMat)
+function rgbMapped = Depth2ColorMap_v2(rgbRaw)
 % In this function, I am going to find out the RGB map(512x424) using the depth
 % image(512x424) and the rgb image(1920x1080). For that, I need some parameters
 % which I am going to get from online forum for the time being and later on I
@@ -31,8 +31,7 @@ function rgbMapped = Depth2ColorMap_v2(rgbMat)
 %   getColorCameraParams)
 %
 % INPUTs:
-%   depthUndistMat --> Depth image matrix of size 512x424
-%   rgbMat --> RGB image matrix of size 1920x1080
+%   rgbRaw --> RGB image matrix of size 1920x1080
 % OUTPUTs:
 %   rgbMapped --> Mapped RGB image matrix of size 512x424
 
@@ -59,16 +58,16 @@ color_q = 0.002199;
 for y=1:424
     for x=1:512
         % Get the distorted coordinate
-        [mx, my] = distort(x, y, depth);
+        [my, mx] = distort(y, x, depth);
         % Depth to Color mapping
-        [rx, ry] = depth_to_color(x, y, depth, color, depth_q, color_q);
-        rgbMapped(y, x, :) = rgbMat(ry, rx, :);
+        [ry, rx] = depth_to_color(y, x, depth, color, depth_q, color_q);
+        rgbMapped(y, x, :) = rgbRaw(ry, rx, :);
     end
 end
 end
 
 %% Function to find the distorted position of a pixel.
-function [x, y] = distort(mx, my, depth)
+function [y, x] = distort(my, mx, depth)
 dx = (mx - depth.cx) / depth.fx;
 dy = (my - depth.cy) / depth.fy;
 dx2 = dx * dx;
@@ -83,7 +82,7 @@ y = depth.fy * (dy * kr + depth.p1 * (r2 + 2 * dy2) + depth.p2 * dxdy2) ...
 end
 
 %% Function to map a depth pixel to the rgb pixel
-function [rx, ry]=depth_to_color(mx, my, depth, color, depth_q, color_q)
+function [rx, ry]=depth_to_color(my, mx, depth, color, depth_q, color_q)
 mx = (mx - depth.cx) * depth_q;
 my = (my - depth.cy) * depth_q;
 
