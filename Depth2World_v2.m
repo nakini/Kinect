@@ -1,4 +1,4 @@
-function [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepth, flyWinSize)
+function [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepth, flyWinSize, flyDistTh)
 % This function converts the depth values in meters to world coordinates. The 
 % input is a MxN matrix and the out will be M*Nx3 matrix. To convert the depth 
 % into world coordiantes we need the instrinsic parameters of the depth camera.
@@ -9,6 +9,8 @@ function [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepth, flyWinSize)
 %   fileName: Depth image file name
 %   maxDepth: Maximum depth which is set by the user
 %   flyWinSize: Window size which will be used to get rid of flying pixels
+%   flyDistTh: Threshold to determine whether to keep/discard pixels after the 
+%           flying window operation
 %
 % OUTPUTs:
 %   Xw, Yw, Zw: X, Y, Z values for each pixel
@@ -16,11 +18,14 @@ function [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepth, flyWinSize)
 
 %^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 %------------------------------- START -----------------------------------------
-
-if (nargin < 3)
-    flyWinSize = 3;
-    if (nargin < 2)
-        maxDepth = 3;
+% Some default vlaues
+if(nargin <4)
+    flyDistTh = 0.02;
+    if (nargin < 3)
+        flyWinSize = 3;
+        if (nargin < 2)
+            maxDepth = 3;
+        end
     end
 end
 
@@ -95,7 +100,7 @@ for r=flyWinSize+1:maxR-flyWinSize
     end
 end
 % Set the threshold to remove all the flying pixels.
-indxNoFlyPixels = (distMat > 0) & (distMat < 0.05);
+indxNoFlyPixels = (distMat > 0) & (distMat < flyDistTh);
 % Remove all the points which are beyond the required depth.
 indxValid = z3D > 0.5 & z3D < maxDepth;
 
