@@ -117,6 +117,6 @@ for iNTF=startIndx:samplingRate:endIndx
         % Create XYZ, Nor and Tri files for each point cloud which could be used 
         % to register to with each other to create a complete 3D point cloud.
         binDir = [dirName, '/PCinXYZNorTri/'];
-%         createXYZTriNor(dataXYZ, binDir, iNTF);
+        CreateXYZTriNor(dataXYZ, binDir, iNTF);
     end
 end
