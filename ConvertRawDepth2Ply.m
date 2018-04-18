@@ -1,18 +1,20 @@
 function ConvertRawDepth2Ply(dirName, maxDepthInMeters, KinectType, ...
-                            startIndx, endIndx, samplingRate, Mode)
+                            startIndx, endIndx, samplingRate, CenterFlag, Mode)
 % This function reads the text files which contain the raw depth and converts 
 % them into a ply file. It also creates XYZ, Nor, Tri files for 3D model 
 % creation.
 % 
 % INPUT:
-%   dirName     : Directory name containing the raw text files.
-%   maxDepthInMeters : Point beyond this maximum depth will be ignored.
+%   dirName     : Directory name containing the raw text/image files.
+%   maxDepthInMeters : Point beyond this depth will be ignored.
+%   KinectType  : Either Kinect-360(v1) or Kinect-ONE(v2)
 %   startIndx   : Starting number of the file which will be included in the 
 %               complete 3D point cloud.
 %   numPCs      : Total number of point clouds from which the 3D model will be 
 %               created.
-%   samplingRate: The difference between two consequtive images.
-%   KinectType  : Either Kinect-360(v1) or Kinect-ONE(v2)
+%   samplingRate: The difference between two consequtive images (Default = 1)
+%   CenterFlag  : Weither or not to move the point cloud to the center 
+%               (Default: No Centering)
 %   Mode        : Now this program can read both text and image files. 
 %               1 -- text files (Not a good idea to store image as a text file.
 %               2 -- PPM image (Default)
@@ -25,28 +27,32 @@ function ConvertRawDepth2Ply(dirName, maxDepthInMeters, KinectType, ...
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
 % Set the default parameters firs.
-if (nargin < 7)
+if (nargin < 8)
     % Read image files.
     Mode = 2;
-    if (nargin < 6)
-        % Sampling rate -- Using kinect we can grab a lot a images but we don't 
-        % need all of them to create the complete point cloud. So, take only 
-        % few samples from the whole data set.
-        samplingRate = 1;
-        if (nargin < 5)
-            % First get all the depth image files inside the directory.
-            if (strcmpi(KinectType, 'v1'))
-                listTxtFiles = dir([dirName, '/*.ppm']);
-            elseif (strcmpi(KinectType, 'v2'))
-                listTxtFiles = dir([dirName, '/*.png']);
+    if (nargin < 7)
+        CenterFlag = 'No Center';
+        if (nargin < 6)
+            % Sampling rate -- Using kinect we can grab a lot a images but we don't
+            % need all of them to create the complete point cloud. So, take only
+            % few samples from the whole data set.
+            samplingRate = 1;
+            if (nargin < 5)
+                % First get all the depth image files inside the directory.
+                if (strcmpi(KinectType, 'v1'))
+                    listTxtFiles = dir([dirName, '/*.ppm']);
+                elseif (strcmpi(KinectType, 'v2'))
+                    listTxtFiles = dir([dirName, '/*.png']);
+                end
+                endIndx = length(listTxtFiles);
+                
             end
-            endIndx = length(listTxtFiles);
-            
         end
+        
     end
 else
-    error(['At least provide directory name containing the images, maximum '
-        'depth to be captured, Kinect type and starting image number']);
+    error(['At least provide DIRECTORY-NAME containing the images, ', ...
+        'MAXIMUM-DEPTH to be captured, KINECT-TYPE and STARTING-IMAGE-NUM']);
 end
 
 % Make a directory to store the ply files.
@@ -92,7 +98,10 @@ for iNTF=startIndx:samplingRate:endIndx
     end
 %     dataXYZ = cat(2, Xw, Yw, Zw);
     dataXYZ = cat(2, Xw, Yw-maxDepthInMeters, Zw);
-    
+    % Center the point cloud, i.e., make the mean of the pc zero.
+    if (strcmpi(CenterFlag , 'Center'))
+        dataXYZ = dataXYZ - mean(dataXYZ);
+    end
     % Check whether the cloud is empty or not. If it is empty then don't create
     % the point cloud or else create the ply files and the corresponding NOR,
     % TRI and XYZ.
