@@ -1,3 +1,6 @@
 *~
 # No Matlab's .mat files
 *.mat
+
+# No ply files
+*.ply
