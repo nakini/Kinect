@@ -1,4 +1,5 @@
-function [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepth, flyWinSize, flyDistTh)
+function [Xw, Yw, Zw, Rw,Gw,Bw] = Depth2World_v2(depthFileName, ...
+    maxDepth, flyWinSize, flyDistTh, mergedFileName)
 % This function converts the depth values in meters to world coordinates. The 
 % input is a MxN matrix and the out will be M*Nx3 matrix. To convert the depth 
 % into world coordiantes we need the instrinsic parameters of the depth camera.
@@ -6,29 +7,33 @@ function [Xw, Yw, Zw] = Depth2World_v2(fileName, maxDepth, flyWinSize, flyDistTh
 % extrinsic parameters.
 %
 % INPUTs:
-%   fileName: Depth image file name
-%   maxDepth: Maximum depth which is set by the user
-%   flyWinSize: Window size which will be used to get rid of flying pixels
-%   flyDistTh: Threshold to determine whether to keep/discard pixels after the 
-%           flying window operation
+%   fileName    : Depth image file name
+%   maxDepth    : Maximum depth which is set by the user
+%   flyWinSize  : Window size which will be used to get rid of flying pixels
+%   flyDistTh   : Threshold to determine whether to keep/discard pixels after  
+%           the flying window operation
+%   mergedFileName: File of the image that contains the R,G,B values
 %
 % OUTPUTs:
-%   Xw, Yw, Zw: X, Y, Z values for each pixel
+%   Xw, Yw, Zw  : X, Y, Z values for each pixel
+%   Rw, Gw, Bw  : Color informatio for each pixel
 %
 
 %^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 %------------------------------- START -----------------------------------------
 % Some default vlaues
-if(nargin <4)
-    flyDistTh = 0.02;
-    if (nargin < 3)
-        flyWinSize = 3;
-        if (nargin < 2)
-            maxDepth = 3;
+if nargin <5
+    mergedFileName = 'No_Merged_FileName';
+    if(nargin <4)
+        flyDistTh = 0.02;
+        if (nargin < 3)
+            flyWinSize = 3;
+            if (nargin < 2)
+                maxDepth = 3;
+            end
         end
     end
 end
-
 % Extrinsic parameters of the depth camera. These values are collected from the
 % dicussion forum.
 % fx=367.286994337726;        % Focal length in X and Y
@@ -57,7 +62,7 @@ p2 = 0;
 % fileName = '~/Desktop/Data/Tushar_Thang/Data/20161116/2016-11-15-13hr-7min/
 %           depthImg_0261.ppm';
 % fileName = '~/Desktop/Data/TestData/blah/depthImg_0018.ppm';
-imgPixels = imread(fileName);
+imgPixels = imread(depthFileName);
 % imgPixels = imgPixels (:, end:-1:1);
 x3D = zeros(size(imgPixels));
 y3D = zeros(size(imgPixels));
@@ -71,9 +76,6 @@ for r=1:maxR
     for c=1:maxC
         % The depth value is equal to intensity. But it is stored in mm.
         d = double(imgPixels(r,c)) / 1000;
-%         u = (c - cx)/fx;
-%         v = (r - cy)/fy;
-%         z3D(r,c) = sqrt(d^2/(u^2+v^2));
         z3D(r,c) = d;
         x3D(r,c) = (c - cx) * z3D(r,c) / fx;
         y3D(r,c) = (r - cy) * z3D(r,c) / fy;
@@ -104,9 +106,25 @@ indxNoFlyPixels = (distMat > 0) & (distMat < flyDistTh);
 % Remove all the points which are beyond the required depth.
 indxValid = z3D > 0.5 & z3D < maxDepth;
 
-Xw = x3D(indxValid & indxNoFlyPixels);
-Yw = y3D(indxValid & indxNoFlyPixels);
-Zw = z3D(indxValid & indxNoFlyPixels);
+indCommonValid = indxValid & indxNoFlyPixels;
+Xw = x3D(indCommonValid);
+Yw = y3D(indCommonValid);
+Zw = z3D(indCommonValid);
 
+% Color information from the merged image. If the merged file name is mentioned
+% then get the color information
+Rw = []; Gw = []; Bw = [];
+% If the mergedFileName variable has the default value then it has not been
+% mentioned by the user, so don't calculate the RGB values.
+if ~strcmpi(mergedFileName,'No_Merged_FileName')
+    imgPixelsColor = imread(mergedFileName);
+    R = imgPixelsColor(:,:,1);
+    G = imgPixelsColor(:,:,2);
+    B = imgPixelsColor(:,:,3);
+    
+    Rw = R(indCommonValid);
+    Gw = G(indCommonValid);
+    Bw = B(indCommonValid);
+end
 % Display the points.
 % plot3(Xw, Yw, Zw, '.');

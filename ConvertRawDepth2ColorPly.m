@@ -79,9 +79,13 @@ for iNTF=startIndx:samplingRate:endIndx
             depthFileName = sprintf('depthImg_%04d.png', iNTF);
             mergedFileName = sprintf('mergedImg_%04d.jpg', iNTF);
             fullDepthFileName = [dirName, '/', depthFileName];
+            fullMergedFileName = [dirName, '/', mergedFileName];
             if(exist(fullDepthFileName, 'file') == 2)
+                flyDistTh = 0.02;
+                flyWinSize = 3;
                 % Now, get the X, Y, Z of each point in a world coordinate frame.
-                [Xw, Yw, Zw] = Depth2World_v2(fullDepthFileName, maxDepthInMeters);
+                [Xw, Yw, Zw, Rw, Gw, Bw] = Depth2World_v2(fullDepthFileName, ...
+                    maxDepthInMeters,flyWinSize, flyDistTh, fullMergedFileName);
             else
                 continue;
             end
@@ -91,6 +95,7 @@ for iNTF=startIndx:samplingRate:endIndx
   
 %     dataXYZ = cat(2, Xw, Yw, Zw);
     dataXYZ = cat(2, Xw, Yw-maxDepthInMeters, Zw);
+    dataRGB = cat(2, Rw, Gw, Bw);
     % Center the point cloud, i.e., make the mean of the pc zero.
     if (strcmpi(CenterFlag , 'Center'))
         dataXYZ = dataXYZ - mean(dataXYZ);
@@ -113,12 +118,12 @@ for iNTF=startIndx:samplingRate:endIndx
             end
         end
         fileName = [dirName, '/PCinPLY/', nameWithoutExt];
-        pcwrite(pointCloud(dataXYZ), fileName);
+        pcwrite(pointCloud(dataXYZ, 'Color', dataRGB), fileName);
 %         pc2ply(fileName, dataXYZ);
         
         % Create XYZ, Nor and Tri files for each point cloud which could be used 
         % to register to with each other to create a complete 3D point cloud.
         binDir = [dirName, '/PCinXYZNorTri/'];
-        CreateXYZTriNor(dataXYZ, binDir, iNTF);
+%         CreateXYZTriNor(dataXYZ, binDir, iNTF);
     end
 end
