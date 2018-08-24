@@ -93,8 +93,8 @@ for iNTF=startIndx:samplingRate:endIndx
             error('Kinect type should either v1 or v2');
         end
   
-%     dataXYZ = cat(2, Xw, Yw, Zw);
-    dataXYZ = cat(2, Xw, Yw-maxDepthInMeters, Zw);
+    dataXYZ = cat(2, Xw, Yw, Zw);
+%     dataXYZ = cat(2, Xw, Yw-maxDepthInMeters, Zw);
     dataRGB = cat(2, Rw, Gw, Bw);
     % Center the point cloud, i.e., make the mean of the pc zero.
     if (strcmpi(CenterFlag , 'Center'))
