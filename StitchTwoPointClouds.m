@@ -22,24 +22,18 @@ elseif nargin ~= 5
     error('ERROR!!! -- Atleast, provide two point clouds and a transformation matrix');
 end
 
-% Transform the 'Location' in pc1 into frame of pc2 such that:
-% pc_tformed = R*pc1 + T
-% Before using the Translation vector convert it into Meters from milli-meters
-pc1Count = size(pc1.Location, 1);
-pc1_tformed = tform_PC1toPC2.R * pc1.Location' + repmat(tform_PC1toPC2.T/1000, ...
-    [1,pc1Count]);
+% Transform the pc1 into frame of pc2 such that:
+% For Location: pc_tformed.Location = R*pc1 + T
+% For Normal: pc_tformed.Normal = R*pc1
+pc1_tformed = TransformPointCloud(pc1, tform_PC1toPC2);
 
 % Merge the Location info:
-pcFinal_Location = cat(1, pc1_tformed', pc2.Location);
+pcFinal_Location = cat(1, pc1_tformed.Location, pc2.Location);
 
 % If the normal information is available for both the PCs then, transform the
 % Normal in pc1 into pc2 using the same equation as the above one.
 if ~isempty(pc1.Normal) && ~isempty(pc2.Normal)
-    % Transform the normal
-    pc1Normal_tformed = tform_PC1toPC2.R * pc1.Normal';
-    
-    % Merge the normal information
-    pcFinal_Normal = cat(1, pc1Normal_tformed, pc2.Normal);
+    pcFinal_Normal = cat(1, pc1_tformed.Normal, pc2.Normal);
 else
     pcFinal_Normal = [];
 end
