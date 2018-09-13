@@ -1,4 +1,4 @@
-function [Xw, Yw, Zw, Rw,Gw,Bw] = Depth2World_v2(depthFileName, ...
+function [Xw, Yw, Zw, Rw,Gw,Bw, varargout] = Depth2World_v2(depthFileName, ...
     maxDepth, flyWinSize, flyDistTh, mergedFileName)
 % This function converts the depth values in meters to world coordinates. The 
 % input is a MxN matrix and the out will be M*Nx3 matrix. To convert the depth 
@@ -17,6 +17,8 @@ function [Xw, Yw, Zw, Rw,Gw,Bw] = Depth2World_v2(depthFileName, ...
 % OUTPUTs:
 %   Xw, Yw, Zw  : X, Y, Z values for each pixel
 %   Rw, Gw, Bw  : Color informatio for each pixel
+%   indCommonValid : Valid indices from which the XYZ and RGB values have been
+%                   evaluated
 %
 
 %^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -128,3 +130,22 @@ if ~strcmpi(mergedFileName,'No_Merged_FileName')
 end
 % Display the points.
 % plot3(Xw, Yw, Zw, '.');
+
+% Return few more information like the index of 3D points in the depth image,
+% the value of X, Y and Z in terms of a matrix that is of same size as the depth
+% image.
+if nargout > 6
+        varargout{1} = indCommonValid;
+        if nargout > 7
+            varargout{2} = x3D;
+            if nargout > 8
+                varargout{3} = y3D;
+                if nargout > 9
+                    varargout{4} = z3D;
+                    if nargout > 10
+                        error('The out put argument count should not exceed 10');
+                    end
+                end
+            end
+        end
+end
