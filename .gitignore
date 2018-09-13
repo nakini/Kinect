@@ -4,3 +4,6 @@
 
 # No ply files
 *.ply
+
+# No unit test files
+UT_*
