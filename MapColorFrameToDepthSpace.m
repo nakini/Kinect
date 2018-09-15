@@ -1,5 +1,4 @@
-function mergedPC = MapColorFrameToDepthSpace(depthImgName, rgbImgName, ...
-    tformDepth2RGB)
+function mergedPC = MapColorFrameToDepthSpace(depthImg, rgbImg, tformDepth2RGB)
 % In this function, I am going to find out the RGB map(512x424) using the depth
 % image(512x424) and the rgb image(1920x1080). For that, I am going to use the
 % camera calibration parameters I have obtained from the calibraion process.
@@ -28,7 +27,7 @@ function mergedPC = MapColorFrameToDepthSpace(depthImgName, rgbImgName, ...
 % Read the Depth image and undistort it first
 
 % Get all the pixel coordinates that are in the valid range.
-[X, Y, Z] = Depth2World_v2(depthImgName);
+[X, Y, Z] = Depth2World_v2(depthImg);
 
 % Transform all the points from the depth image to the color image coordinate
 % system
@@ -48,7 +47,6 @@ dataUVs(dataUVs(:,2) < 0, 2) = 1;
 dataUVs(dataUVs(:,2) > 1080, 2) = 1080;
 
 % Read the RGB image and undistort it.
-rgbImg = imread(rgbImgName);
 [rCol, cCol, ~] = size(rgbImg);
 indxColImg = sub2ind([rCol, cCol], dataUVs(:,2), dataUVs(:,1));
 R = rgbImg(:,:,1);

@@ -1,5 +1,5 @@
-function [Xw, Yw, Zw, Rw,Gw,Bw, varargout] = Depth2World_v2(depthFileName, ...
-    maxDepth, flyWinSize, flyDistTh, mergedFileName)
+function [Xw, Yw, Zw, Rw,Gw,Bw, varargout] = Depth2World_v2(depthImg, ...
+    maxDepth, flyWinSize, flyDistTh, mergedImg)
 % This function converts the depth values in meters to world coordinates. The 
 % input is a MxN matrix and the out will be M*Nx3 matrix. To convert the depth 
 % into world coordiantes we need the instrinsic parameters of the depth camera.
@@ -25,7 +25,7 @@ function [Xw, Yw, Zw, Rw,Gw,Bw, varargout] = Depth2World_v2(depthFileName, ...
 %------------------------------- START -----------------------------------------
 % Some default vlaues
 if nargin <5
-    mergedFileName = 'No_Merged_FileName';
+    mergedImg = [];
     if(nargin <4)
         flyDistTh = 0.02;
         if (nargin < 3)
@@ -64,20 +64,20 @@ p2 = 0;
 % fileName = '~/Desktop/Data/Tushar_Thang/Data/20161116/2016-11-15-13hr-7min/
 %           depthImg_0261.ppm';
 % fileName = '~/Desktop/Data/TestData/blah/depthImg_0018.ppm';
-imgPixels = imread(depthFileName);
-% imgPixels = imgPixels (:, end:-1:1);
-x3D = zeros(size(imgPixels));
-y3D = zeros(size(imgPixels));
-z3D = zeros(size(imgPixels));
+% depthImg = imread(depthImg);
+% depthImg = depthImg (:, end:-1:1);
+x3D = zeros(size(depthImg));
+y3D = zeros(size(depthImg));
+z3D = zeros(size(depthImg));
 
 % For the depth image the coordinate calculation formula is:
 % 3D coordinates from point cloud using depth value.. in Kinect coordinate
 % space
-[maxR, maxC] = size(imgPixels);
+[maxR, maxC] = size(depthImg);
 for r=1:maxR
     for c=1:maxC
         % The depth value is equal to intensity. But it is stored in mm.
-        d = double(imgPixels(r,c)) / 1000;
+        d = double(depthImg(r,c)) / 1000;
         z3D(r,c) = d;
         x3D(r,c) = (c - cx) * z3D(r,c) / fx;
         y3D(r,c) = (r - cy) * z3D(r,c) / fy;
@@ -89,7 +89,7 @@ end
 % TODO:
 %   I need to check 2 other mehods where the concept of the normal is being
 %   used to get rid of flying pixels.
-distMat = zeros(size(imgPixels));
+distMat = zeros(size(depthImg));
 tmpDist = 0;
 for r=flyWinSize+1:maxR-flyWinSize
     for c=flyWinSize+1:maxC-flyWinSize
@@ -118,11 +118,11 @@ Zw = z3D(indCommonValid);
 Rw = []; Gw = []; Bw = [];
 % If the mergedFileName variable has the default value then it has not been
 % mentioned by the user, so don't calculate the RGB values.
-if ~strcmpi(mergedFileName,'No_Merged_FileName')
-    imgPixelsColor = imread(mergedFileName);
-    R = imgPixelsColor(:,:,1);
-    G = imgPixelsColor(:,:,2);
-    B = imgPixelsColor(:,:,3);
+if ~isempty(mergedImg)
+%     depthImgColor = imread(mergedImg);
+    R = mergedImg(:,:,1);
+    G = mergedImg(:,:,2);
+    B = mergedImg(:,:,3);
     
     Rw = R(indCommonValid);
     Gw = G(indCommonValid);
