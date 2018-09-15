@@ -20,8 +20,8 @@ function ConvertRawDepth2ColorPly(dirName, maxDepthInMeters, KinectType, ...
 %
 % OUTPUTs:
 %
-% Example: ConvertRawDepth2Ply_v1('~/Desktop/test_images_July11_dusk/', 
-%       1.5, 1, 100, 2)
+% Example: 
+%
 
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
@@ -83,9 +83,11 @@ for iNTF=startIndx:samplingRate:endIndx
             if(exist(fullDepthFileName, 'file') == 2)
                 flyDistTh = 0.02;
                 flyWinSize = 3;
+                depthImg = imread(fullDepthFileName);
+                mergedImg = imread(fullMergedFileName);
                 % Now, get the X, Y, Z of each point in a world coordinate frame.
-                [Xw, Yw, Zw, Rw, Gw, Bw] = Depth2World_v2(fullDepthFileName, ...
-                    maxDepthInMeters,flyWinSize, flyDistTh, fullMergedFileName);
+                [Xw, Yw, Zw, Rw, Gw, Bw] = Depth2World_v2(depthImg, ...
+                    maxDepthInMeters,flyWinSize, flyDistTh, mergedImg);
             else
                 continue;
             end
@@ -125,5 +127,7 @@ for iNTF=startIndx:samplingRate:endIndx
         % to register to with each other to create a complete 3D point cloud.
         binDir = [dirName, '/PCinXYZNorTri/'];
         CreateXYZTriNor(dataXYZ, binDir, iNTF);
+    else
+        disp("Couldn't create a point cloud because it's empty.");
     end
 end
