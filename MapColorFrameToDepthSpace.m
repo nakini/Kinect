@@ -4,8 +4,8 @@ function mergedPC = MapColorFrameToDepthSpace(depthImg, rgbImg, tformDepth2RGB)
 % camera calibration parameters I have obtained from the calibraion process.
 %
 % INPUT(s):
-%   depthImg    : Depth image name including the path
-%   rgbImg      : Color image name with full path
+%   depthImg    : Depth image matrix
+%   rgbImg      : Color image matrix
 %   tformDepth2RGB : Structure containing the Rotation and Translation parameters.
 %   maxDepth    : Maximum depth which is set by the user
 %   flyWinSize  : Window size which will be used to get rid of flying pixels
@@ -23,9 +23,6 @@ function mergedPC = MapColorFrameToDepthSpace(depthImg, rgbImg, tformDepth2RGB)
 %------------------------------- START -----------------------------------------
 % Check the input parameters
 
-
-% Read the Depth image and undistort it first
-
 % Get all the pixel coordinates that are in the valid range.
 [X, Y, Z] = Depth2World_v2(depthImg);
 
@@ -42,11 +39,12 @@ pcInRGBFrame = TransformPointCloud(pcInDepthFrame, tformDepth2RGB);
 dataUVs = ProjectPointsOnImage(pcInRGBFrame.Location, tformDepth2RGB.KK_RGB);
 dataUVs = round(dataUVs);
 
-% Put the RGB values into a 512x424x3 Color image
+% Get rid of all the points which are out of bound. I mean, remove the pixels
+% which have indices less than 0 or more than 1080(1920).
 dataUVs(dataUVs(:,2) < 0, 2) = 1;
 dataUVs(dataUVs(:,2) > 1080, 2) = 1080;
 
-% Read the RGB image and undistort it.
+% Put the RGB values into a 512x424x3 Color image
 [rCol, cCol, ~] = size(rgbImg);
 indxColImg = sub2ind([rCol, cCol], dataUVs(:,2), dataUVs(:,1));
 R = rgbImg(:,:,1);
