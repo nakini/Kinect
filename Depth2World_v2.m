@@ -135,17 +135,17 @@ end
 % the value of X, Y and Z in terms of a matrix that is of same size as the depth
 % image.
 if nargout > 6
-        varargout{1} = indCommonValid;
-        if nargout > 7
-            varargout{2} = x3D;
-            if nargout > 8
-                varargout{3} = y3D;
-                if nargout > 9
-                    varargout{4} = z3D;
-                    if nargout > 10
-                        error('The out put argument count should not exceed 10');
-                    end
+    varargout{1} = indCommonValid;
+    if nargout > 7
+        varargout{2} = x3D;
+        if nargout > 8
+            varargout{3} = y3D;
+            if nargout > 9
+                varargout{4} = z3D;
+                if nargout > 10
+                    error('The out put argument count should not exceed 10');
                 end
             end
         end
+    end
 end

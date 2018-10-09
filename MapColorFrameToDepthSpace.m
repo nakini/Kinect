@@ -41,8 +41,8 @@ dataUVs = round(dataUVs);
 
 % Get rid of all the points which are out of bound. I mean, remove the pixels
 % which have indices less than 0 or more than 1080(1920).
-dataUVs(dataUVs(:,2) < 0, 2) = 1;
-dataUVs(dataUVs(:,2) > 1080, 2) = 1080;
+dataUVs(dataUVs(:,2) <= 0, 2) = 1;
+dataUVs(dataUVs(:,2) >= 1080, 2) = 1080;
 
 % Put the RGB values into a 512x424x3 Color image
 [rCol, cCol, ~] = size(rgbImg);
