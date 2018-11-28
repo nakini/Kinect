@@ -74,8 +74,9 @@ for iNTF=startIndx:samplingRate:endIndx
         pngFileName = sprintf('depthImg_%04d.png', iNTF);
         tmpFileName = [dirName, '/', pngFileName];
         if(exist(tmpFileName, 'file') == 2)
+            depthImg = imread(tmpFileName);
             % Now, get the X, Y, Z of each point in a world coordinate frame.
-            [Xw, Yw, Zw] = Depth2World_v2(tmpFileName, maxDepthInMeters);
+            [Xw, Yw, Zw] = Depth2World_v2(depthImg, maxDepthInMeters);
         else
             continue;
         end
