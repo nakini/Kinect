@@ -1,5 +1,5 @@
 function [Xw, Yw, Zw, Rw,Gw,Bw, varargout] = Depth2World_v2(depthImg, ...
-    maxDepth, flyWinSize, flyDistTh, mergedImg)
+    maxDepth, flyWinSize, flyDistTh, mergedImg, KK)
 % This function converts the depth values in meters to world coordinates. The 
 % input is a MxN matrix and the out will be M*Nx3 matrix. To convert the depth 
 % into world coordiantes we need the instrinsic parameters of the depth camera.
@@ -24,41 +24,54 @@ function [Xw, Yw, Zw, Rw,Gw,Bw, varargout] = Depth2World_v2(depthImg, ...
 %^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 %------------------------------- START -----------------------------------------
 % Some default vlaues
-if nargin <5
-    mergedImg = [];
-    if(nargin <4)
-        flyDistTh = 0.02;
-        if (nargin < 3)
-            flyWinSize = 3;
-            if (nargin < 2)
-                maxDepth = 3;
+if nargin <= 6
+    if nargin == 6 && ~isempty(KK)
+        cx = KK(1,3);
+        cy = KK(2,3);
+        fx = KK(1,1);
+        fy = KK(2,2);
+    else
+        % Extrinsic parameters of the depth camera. These values are collected 
+        % from the dicussion forum.
+        % fx=367.286994337726;        % Focal length in X and Y
+        % fy=367.286855347968;
+        % cx=255.165695200749;        % Principle point in X and Y
+        % cy=211.824600345805;
+        % k1=0.0914203770220268;
+        % k2=-0.269349746097515;
+        % k3=0.0925671408453617;
+        % p1=0;
+        % p2=0;
+        
+        % Parameters from the libfreenect2 running in dubug mode while the kinect
+        % is plugged in.
+        cx = 262.299194;
+        cy = 206.395004;
+        fx = 368.053497;
+        fy = 368.053497;
+        k1 = 0.0842951;
+        k2 = -0.271216;
+        k3 = 0.10087239;
+        p1 = 0;
+        p2 = 0;
+    end
+    
+    % Check for the rest of the arguments.
+    if nargin <5
+        mergedImg = [];
+        if(nargin <4)
+            flyDistTh = 0.02;
+            if (nargin < 3)
+                flyWinSize = 3;
+                if (nargin < 2)
+                    maxDepth = 3;
+                end
             end
         end
     end
+else
+    error('ERROR!!! -- Provide propper parameters');
 end
-% Extrinsic parameters of the depth camera. These values are collected from the
-% dicussion forum.
-% fx=367.286994337726;        % Focal length in X and Y
-% fy=367.286855347968;
-% cx=255.165695200749;        % Principle point in X and Y
-% cy=211.824600345805;
-% k1=0.0914203770220268;
-% k2=-0.269349746097515;
-% k3=0.0925671408453617;
-% p1=0;
-% p2=0;
-
-% Parameters from the libfreenect2 running in dubug mode while the kinect
-% is plugged in.		
-cx = 262.299194;
-cy = 206.395004;
-fx = 368.053497;
-fy = 368.053497;
-k1 = 0.0842951;
-k2 = -0.271216;
-k3 = 0.10087239;
-p1 = 0;
-p2 = 0;
 
 % Read the depth image:
 % fileName = '~/Desktop/Data/Tushar_Thang/Data/20161116/2016-11-15-13hr-7min/
