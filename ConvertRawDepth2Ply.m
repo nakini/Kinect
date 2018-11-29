@@ -40,9 +40,9 @@ if (nargin < 9)
         end
         if nargin < 7 || isempty(denoiseParams)
             disp(['WARNING!!! -- Using default values for denoising which are', ...
-                'flyWinSize = 0.02 and flyDistTh = 3']);
-            denoiseParams.flyWinSize = 0.02;
-            denoiseParams.flyDistTh = 3;
+                'flyWinSize = 3 and flyDistTh = 0.03']);
+            denoiseParams.flyWinSize = 3;
+            denoiseParams.flyDistTh = 0.02;
             if (nargin < 6)
                 % Sampling rate -- Using kinect we can grab a lot a images but 
                 % we don't need all of them to create the complete point cloud. 
@@ -100,7 +100,7 @@ for iNTF=startIndx:samplingRate:endIndx
             depthImg = imread(tmpFileName);
             % Now, get the X, Y, Z of each point in a world coordinate frame.
             [Xw, Yw, Zw] = Depth2World_v2(depthImg, maxDepthInMeters, ...
-                denoiseParams.flyDistTh, denoiseParams.flyWinSize, [], KK);
+                denoiseParams.flyWinSize, denoiseParams.flyDistTh, [], KK);
         else
             continue;
         end
