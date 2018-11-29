@@ -1,5 +1,5 @@
 function ConvertRawDepth2Ply(dirName, maxDepthInMeters, KinectType, ...
-                            startIndx, endIndx, samplingRate, CenterFlag)
+    startIndx, endIndx, samplingRate, denoiseParams, calibIR, CenterFlag)
 % This function reads the text files which contain the raw depth and converts 
 % them into a ply file. It also creates XYZ, Nor, Tri files for 3D model 
 % creation.
@@ -8,40 +8,56 @@ function ConvertRawDepth2Ply(dirName, maxDepthInMeters, KinectType, ...
 %   dirName     : Directory name containing the raw text/image files.
 %   maxDepthInMeters : Point beyond this depth will be ignored.
 %   KinectType  : Either Kinect-360(v1) or Kinect-ONE(v2)
-%   startIndx   : Starting number of the file which will be included in the 
-%               complete 3D point cloud.
-%   numPCs      : Total number of point clouds from which the 3D model will be 
-%               created.
+%   startIndx   : First file number that has to be evaluated
+%   endIndx     : Last file number that needs to be processed
 %   samplingRate: The difference between two consequtive images (Default = 1)
+%   denoiseParams   : Parameters for denoising the point cloud.
+%       1) flyWinSize   : Window size which will be used to get rid of flying pixels
+%       2) flyDistTh    : Threshold to determine whether to keep/discard pixels after  
+%                       the flying window operation
+%   calibIR     : The mat file containing the calibration parameters of the IR
+%               sensor.
 %   CenterFlag  : Weither or not to move the point cloud to the center 
 %               (Default: No Centering)
-%   Mode        : Now this program can read both text and image files. 
-%               1 -- text files (Not a good idea to store image as a text file.
-%               2 -- PPM image (Default)
 %
 % OUTPUTs:
 %
-% Example: ConvertRawDepth2Ply_v1('~/Desktop/test_images_July11_dusk/', 
-%       1.5, 1, 100, 2)
-
+% Example(s):
+%   dirName = '~/Desktop/Data/Alvaro/2017_0825/';
+%   1. ConvertRawDepth2Ply([dirName, '105/SampleImages/'], 2, 'v2', 10121, 10141, 1);
+%   2. ConvertRawDepth2Ply([dirName, '105/SampleImages/'], 2, 'v2', 10121, ...
+%       10141, 1, [], []);
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
 % Set the default parameters firs.
-if (nargin < 7)
+if (nargin < 9)
     CenterFlag = 'No Center';
-    if (nargin < 6)
-        % Sampling rate -- Using kinect we can grab a lot a images but we don't
-        % need all of them to create the complete point cloud. So, take only
-        % few samples from the whole data set.
-        samplingRate = 1;
-        if (nargin < 5)
-            % First get all the depth image files inside the directory.
-            if (strcmpi(KinectType, 'v1'))
-                listTxtFiles = dir([dirName, '/*.ppm']);
-            elseif (strcmpi(KinectType, 'v2'))
-                listTxtFiles = dir([dirName, '/*.png']);
+    if nargin <= 8
+        if nargin < 8  || isempty(calibIR)
+        calibIR = [];
+        disp(['WARNING!!! -- Loading default parameters obtained from the', ...
+            'libfreenect-2 API using debug mode.']);
+        end
+        if nargin < 7 || isempty(denoiseParams)
+            disp(['WARNING!!! -- Using default values for denoising which are', ...
+                'flyWinSize = 0.02 and flyDistTh = 3']);
+            denoiseParams.flyWinSize = 0.02;
+            denoiseParams.flyDistTh = 3;
+            if (nargin < 6)
+                % Sampling rate -- Using kinect we can grab a lot a images but 
+                % we don't need all of them to create the complete point cloud. 
+                % So, take only few samples from the whole data set.
+                samplingRate = 1;
+                if (nargin < 5)
+                    % First get all the depth image files inside the directory.
+                    if (strcmpi(KinectType, 'v1'))
+                        listTxtFiles = dir([dirName, '/*.ppm']);
+                    elseif (strcmpi(KinectType, 'v2'))
+                        listTxtFiles = dir([dirName, '/*.png']);
+                    end
+                    endIndx = length(listTxtFiles);
+                end
             end
-            endIndx = length(listTxtFiles);
         end
     end
 else
@@ -52,6 +68,13 @@ end
 % Make a directory to store the ply files.
 system(sprintf('mkdir %s/PCinPLY', dirName));
 system(sprintf('mkdir %s/PCinXYZNorTri', dirName));
+
+% Load the intrinsic parameters of the IR camera.
+if ~isempty(calibIR)
+    load(calibIR, 'KK');
+else
+    KK = [];
+end
 
 % For each name given in the list read the text file and convert the raw depth 
 % into a X, Y, and Z coordinates and then create a ply file from the 
@@ -76,7 +99,8 @@ for iNTF=startIndx:samplingRate:endIndx
         if(exist(tmpFileName, 'file') == 2)
             depthImg = imread(tmpFileName);
             % Now, get the X, Y, Z of each point in a world coordinate frame.
-            [Xw, Yw, Zw] = Depth2World_v2(depthImg, maxDepthInMeters);
+            [Xw, Yw, Zw] = Depth2World_v2(depthImg, maxDepthInMeters, ...
+                denoiseParams.flyDistTh, denoiseParams.flyWinSize, [], KK);
         else
             continue;
         end
