@@ -27,7 +27,7 @@ function [mergedPC, dataXYZs, dataRGBs] = MapColorFrameToDepthSpace(depthImg, ..
 
 % Get all the pixel coordinates that are in the valid range.
 [X, Y, Z] = Depth2World_v2(depthImg, maxDepth, denoiseParams.flyWinSize, ...
-    denoiseParams.flyDistTh);
+    denoiseParams.flyDistTh, [], tformDepth2RGB.KK_IR);
 
 % Transform all the points from the depth image to the color image coordinate
 % system

@@ -1,5 +1,5 @@
 function ConvertRawDepthRGB2ColorPly(dirName, maxDepthInMeters, KinectType, ...
-    startIndx, endIndx, samplingRate, denoiseParams, dirCalib)
+    startIndx, endIndx, samplingRate, denoiseParams, calibStereo)
 % This function reads the depth and the corresponding RGB images and creates a
 % colored point cloud. While creating the point cloud it takes care of the noise
 % using a moving window approach.
@@ -26,11 +26,15 @@ function ConvertRawDepthRGB2ColorPly(dirName, maxDepthInMeters, KinectType, ...
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
 % Set the default parameters firs.
-if (nargin < 8)
-    dirCalib = '~/Dropbox/PhD/Data/Calibration/Calibration_20181114/HandHeld/';
-    if (nargin < 7)
-        denoiseParams.flyDistTh = 0.02;
+if nargin < 8 || isempty(calibStereo)
+    calibStereo = ['~/Dropbox/PhD/Data/Calibration/', ...
+        'Calibration_20181114/HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
+    disp('WARNING!!! -- Loading the handheld kinect parameters');
+    if nargin < 7 || isempty(denoiseParams)
+        disp(['WARNING!!! -- Using default values for denoising which are', ...
+            'flyWinSize = 0.02 and flyDistTh = 3']);
         denoiseParams.flyWinSize = 3;
+        denoiseParams.flyDistTh = 0.02;
         if (nargin < 6)
             % Sampling rate -- Using kinect we can grab a lot a images but we
             % don't need all of them to create the complete point cloud. So,
@@ -82,16 +86,12 @@ for iNTF=startIndx:samplingRate:endIndx
         % Check whether the file exists or not. If not simply go to the next
         % one. If it is available then process the same.
         if(exist(fullDepthFileName, 'file') == 2)
-            flyDistTh = 0.2;
-            flyWinSize = 5;
             depthImg = imread(fullDepthFileName);
             rgbImg = imread(fullRGBFileName);
-            denoiseParams.flyWinSize = flyWinSize;
-            denoiseParams.flyDistTh = flyDistTh;
             % Load the transformaion parameters. If you have Depth-to-RGB
             % then use it directly or else take the inverse of RGB-to-Depth
             % parameters.
-            load([dirCalib, 'Calib_Results_stereo_rgb_to_ir.mat']);
+            load(calibStereo, 'R', 'T', 'KK_left', 'KK_right');
             % Create as strucutre that will hold R matrix and T vector only.
             tformDepth2RGB.R = inv(R);
             % Convert into Meters as the PC is in Meters
