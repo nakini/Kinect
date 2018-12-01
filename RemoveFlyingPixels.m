@@ -15,17 +15,16 @@ function indxSurfels = RemoveFlyingPixels(data, flyWinSize, flyDistTh)
 
 [maxR, maxC] = size(data.x3D);          % Image matrix size
 distMat = zeros(maxR, maxC);            % Matrix for dist values
-tmpDist = 0;
 for r=flyWinSize+1:maxR-flyWinSize
     for c=flyWinSize+1:maxC-flyWinSize
+        tmpDist = 0;
         for y=r-flyWinSize:1:r+flyWinSize
             for x=c-flyWinSize:1:c+flyWinSize
-                tmpDist = abs(norm([data.x3D(r,c) - data.x3D(y,x), ...
+                tmpDist = tmpDist + abs(norm([data.x3D(r,c) - data.x3D(y,x), ...
                     data.y3D(r,c)-data.y3D(y,x), ...
                     data.z3D(r,c)-data.z3D(y,x)]));
             end
         end
-        
         distMat(r,c) = tmpDist;
     end
 end
