@@ -97,27 +97,10 @@ for r=1:maxR
     end
 end
 
-% Get-rid-of flying pixels using the "window" method. Flying pixel is a inherent
-% problem with the ToF sensors.
-% TODO:
-%   I need to check 2 other mehods where the concept of the normal is being
-%   used to get rid of flying pixels.
-distMat = zeros(size(depthImg));
-tmpDist = 0;
-for r=flyWinSize+1:maxR-flyWinSize
-    for c=flyWinSize+1:maxC-flyWinSize
-        for y=r-flyWinSize:1:r+flyWinSize
-            for x=c-flyWinSize:1:c+flyWinSize
-                tmpDist = abs(norm([x3D(r,c) - x3D(y,x), y3D(r,c)-y3D(y,x), ...
-                    z3D(r,c)-z3D(y,x)]));
-            end
-        end
-        
-        distMat(r,c) = tmpDist;
-    end
-end
-% Set the threshold to remove all the flying pixels.
-indxNoFlyPixels = (distMat > 0) & (distMat < flyDistTh);
+% Remove the flying pixels using the window method.
+data = struct('x3D', x3D, 'y3D', y3D, 'z3D', z3D);
+indxNoFlyPixels = RemoveFlyingPixels(data, flyWinSize, flyDistTh);
+
 % Remove all the points which are beyond the required depth.
 indxValid = z3D > 0.5 & z3D < maxDepth;
 
