@@ -2,8 +2,9 @@
 # No Matlab's .mat files
 *.mat
 
-# No ply files
+# No ply or text files
 *.ply
+*.txt
 
 # No unit test files
 UT_*
