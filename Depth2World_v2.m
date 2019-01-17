@@ -99,7 +99,7 @@ end
 
 % Remove the flying pixels using the window method.
 data = struct('x3D', x3D, 'y3D', y3D, 'z3D', z3D);
-indxNoFlyPixels = RemoveFlyingPixels(data, flyWinSize, flyDistTh);
+[indxNoFlyPixels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh);
 
 % Remove all the points which are beyond the required depth.
 indxValid = z3D > 0.5 & z3D < maxDepth;
