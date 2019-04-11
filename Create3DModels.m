@@ -65,8 +65,11 @@ for imgNum = startIndx+1:samplingRate:endIndx
         continue;
     end
 end
-pcNameFullMoved = sprintf('%s/Final.ply', dirName);
-movefile('RegisteredPC.ply', pcNameFullMoved);
+
+if exist('/tmp/RegisteredPC.ply', 'file') ==2
+    pcNameFullMoved = sprintf('%s/Final.ply', dirName);
+    movefile('RegisteredPC.ply', pcNameFullMoved);
+end
 end
 
 function trnsForm = ReadTransformationFile(rtFileName)
