@@ -57,8 +57,14 @@ else
 end
 
 % Make a directory to store the ply files.
-system(sprintf('mkdir %s/PCinPLY', dirName));
-system(sprintf('mkdir %s/PCinXYZNorTri', dirName));
+[~, msg, ~] = mkdir([dirName, '/PCinPLY']);
+if ~isempty(msg)
+    disp(msg);
+end
+[~, msg, ~] = mkdir([dirName,'/PCinXYZNorTri']);
+if ~isempty(msg)
+    disp(msg);
+end
 
 % For each name given in the list read the depth image file and convert the raw
 % depth into a X, Y, and Z coordinates. Also read the corresponding merged
