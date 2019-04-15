@@ -1,59 +1,66 @@
 function ConvertRawDepthRGB2ColorPly(dirName, maxDepthInMeters, KinectType, ...
-    startIndx, endIndx, samplingRate, denoiseParams, calibStereo)
+    imgNumberStruct, denoiseParamsStruct, calibStereo)
 % This function reads the depth and the corresponding RGB images and creates a
 % colored point cloud. While creating the point cloud it takes care of the noise
 % using a moving window approach.
 %
-% INPUT:
+% INPUT(s):
 %   dirName     : Directory name containing the raw text/image files.
 %   maxDepthInMeters : Point beyond this depth will be ignored.
 %   KinectType  : Either Kinect-360(v1) or Kinect-ONE(v2)
-%   startIndx   : Starting number of the file which will be included in the
-%               complete 3D point cloud.
-%   numPCs      : Total number of point clouds from which the 3D model will be
-%               created.
-%   samplingRate: The difference between two consequtive images (Default = 1)
-%   denoiseParams   : Parameters for denoising the point cloud.
+%   imgNumberStruct : Structure holding the info about the images that need to
+%               be processed. If this structure is empty then the all the images
+%               inside the folder will be processed.
+%       startIndx   : Starting number of the file which will be included in the
+%                   complete 3D point cloud.
+%       endIndx     : Last image number that need to be processed
+%       samplingRate: The difference between two consequtive images (Default = 1)
+%   denoiseParamsStruct   : Parameters for denoising the point cloud.
 %       1) flyWinSize   : Window size which will be used to get rid of flying pixels
 %       2) flyDistTh    : Threshold to determine whether to keep/discard pixels after
 %                       the flying window operation
+%   calibStereo : Calibration parameters of the Kinect that will be used in
+%               processing the images.
 %
-% OUTPUTs:
+% OUTPUT(s):
 %
-% Example:
+% Example(s):
 %
 
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
-% Set the default parameters firs.
-if nargin < 8 || isempty(calibStereo)
+if nargin < 3
+    error(['At least provide DIRECTORY-NAME containing the images, ', ...
+        'MAXIMUM-DEPTH to be captured, KINECT-TYPE']);
+end
+
+% Check and if needed, set the default parameters.
+% Check for the calibration parameters
+if nargin < 6 || isempty(calibStereo)
     calibStereo = ['~/Dropbox/PhD/Data/Calibration/', ...
         'Calibration_20181114/HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
     disp('WARNING!!! -- Loading the handheld kinect parameters');
-    if nargin < 7 || isempty(denoiseParams)
-        disp(['WARNING!!! -- Using default values for denoising which are', ...
-            'flyWinSize = 0.02 and flyDistTh = 3']);
-        denoiseParams.flyWinSize = 3;
-        denoiseParams.flyDistTh = 0.02;
-        if (nargin < 6)
-            % Sampling rate -- Using kinect we can grab a lot a images but we
-            % don't need all of them to create the complete point cloud. So,
-            % take only few samples from the whole data set.
-            samplingRate = 1;
-            if (nargin < 5)
-                % First get all the depth image files inside the directory.
-                if (strcmpi(KinectType, 'v1'))
-                    listTxtFiles = dir([dirName, '/*.ppm']);
-                elseif (strcmpi(KinectType, 'v2'))
-                    listTxtFiles = dir([dirName, '/*.png']);
-                end
-                endIndx = length(listTxtFiles);
-            end
-        end
+end
+% Check for image denoising parameters
+if nargin < 5 || isempty(denoiseParamsStruct)
+    disp(['WARNING!!! -- Using default values for denoising which are', ...
+        'flyWinSize = 0.02 and flyDistTh = 3']);
+    denoiseParamsStruct.flyWinSize = 3;
+    denoiseParamsStruct.flyDistTh = 0.02;
+end
+% Check for the image numbers that need to be processed
+if (nargin < 4 || isempty(imgNumberStruct))
+    % First get all the depth image files inside the directory.
+    if (strcmpi(KinectType, 'v1'))
+        imgNumberStruct = FindImagesNumbers(dirName, 'ppm');
+    elseif (strcmpi(KinectType, 'v2'))
+        imgNumberStruct = FindImagesNumbers(dirName, 'png');
     end
-else
-    error(['At least provide DIRECTORY-NAME containing the images, ', ...
-        'MAXIMUM-DEPTH to be captured, KINECT-TYPE and STARTING-IMAGE-NUM']);
+    
+    % Sampling rate -- Using kinect we can grab a lot a images but we
+    % don't need all of them to create the complete point cloud. So,
+    % take only few samples from the whole data set.
+    imgNumberStruct = setfield(imgNumberStruct, 'samplingRate', 1);
 end
 
 % Make a directory to store the ply files.
@@ -70,7 +77,7 @@ end
 % depth into a X, Y, and Z coordinates. Also read the corresponding merged
 % image file to get the R, G and B values. In the end, create a ply file from
 % the coordinates with the color information.
-for iNTF=startIndx:samplingRate:endIndx
+for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.endIndx
     % Read the ppm files. Each pixel in the ppm file is a depth value.
     if (strcmpi(KinectType, 'v1'))          %% KINECT-V1
         ppmFileName = sprintf('depth%04d.ppm', iNTF);
@@ -107,7 +114,7 @@ for iNTF=startIndx:samplingRate:endIndx
             
             % Now, get the X, Y, Z of each point in a world coordinate frame.
             [~, dataXYZ, dataRGB] = MapColorFrameToDepthSpace(depthImg, ...
-                rgbImg, tformDepth2RGB, maxDepthInMeters,denoiseParams);
+                rgbImg, tformDepth2RGB, maxDepthInMeters,denoiseParamsStruct);
         else
             continue;
         end
