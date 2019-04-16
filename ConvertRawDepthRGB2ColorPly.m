@@ -1,4 +1,4 @@
-function ConvertRawDepthRGB2ColorPly(dirName, maxDepthInMeters, KinectType, ...
+function imgCounts = ConvertRawDepthRGB2ColorPly(dirName, maxDepthInMeters, KinectType, ...
     imgNumberStruct, denoiseParamsStruct, calibStereo)
 % This function reads the depth and the corresponding RGB images and creates a
 % colored point cloud. While creating the point cloud it takes care of the noise
@@ -23,9 +23,11 @@ function ConvertRawDepthRGB2ColorPly(dirName, maxDepthInMeters, KinectType, ...
 %               processing the images.
 %
 % OUTPUT(s):
-%
+%   imgCounts   : Count of images that are being process
 % Example(s):
-%
+%   imgCounts = ConvertRawDepthRGB2ColorPly('/media/tnb88/My Passport/PhD/
+%       Data/Alvaro/2017_0825/103/SampleImages/', 2, 'v2', {},  
+%       struct('flyWinSize', 3, 'flyDistTh', 1.2))
 
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
@@ -77,6 +79,7 @@ end
 % depth into a X, Y, and Z coordinates. Also read the corresponding merged
 % image file to get the R, G and B values. In the end, create a ply file from
 % the coordinates with the color information.
+imgCounts = 0;                  % Keeps track of how many images are processed
 for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.endIndx
     % Read the ppm files. Each pixel in the ppm file is a depth value.
     if (strcmpi(KinectType, 'v1'))          %% KINECT-V1
@@ -115,6 +118,9 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
             % Now, get the X, Y, Z of each point in a world coordinate frame.
             [~, dataXYZ, dataRGB] = MapColorFrameToDepthSpace(depthImg, ...
                 rgbImg, tformDepth2RGB, maxDepthInMeters,denoiseParamsStruct);
+            
+            % Increment the count
+            imgCounts = imgCounts + 1;
         else
             continue;
         end
