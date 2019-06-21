@@ -5,10 +5,10 @@ function Create3DModels(dirName, startIndx, endIndx, samplingRate)
 % complete 3D model will be created based on the 1st ply file.
 %
 % INPUT(s):
-%   dirName := Name of the folder containing all the ply files
-%   startIndx := File number of 1st pc
-%   endIndx := Last file number
-%   samplingRate := Number of files that need to be skipped
+%   dirName     := Name of the folder containing all the ply files
+%   startIndx   := File number of 1st pc
+%   endIndx     := Last file number
+%   samplingRate:= Number of files that need to be skipped
 %
 % OUTPUT(s):
 %
