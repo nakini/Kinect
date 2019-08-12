@@ -104,6 +104,9 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
         if(exist(fullDepthFileName, 'file') == 2)
             depthImg = imread(fullDepthFileName);
             rgbImg = imread(fullRGBFileName);
+            % Load the calibration parameters of the Kinect for RGB and IR
+            % images and undistort the same.
+            
             % Load the transformaion parameters. If you have Depth-to-RGB
             % then use it directly or else take the inverse of RGB-to-Depth
             % parameters.

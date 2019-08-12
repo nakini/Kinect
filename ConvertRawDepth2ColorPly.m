@@ -53,9 +53,19 @@ else
         'MAXIMUM-DEPTH to be captured, KINECT-TYPE and STARTING-IMAGE-NUM']);
 end
 
+% % Make a directory to store the ply files.
+% system(sprintf('mkdir %s/PCinPLY', dirName));
+% system(sprintf('mkdir %s/PCinXYZNorTri', dirName));
+
 % Make a directory to store the ply files.
-system(sprintf('mkdir %s/PCinPLY', dirName));
-system(sprintf('mkdir %s/PCinXYZNorTri', dirName));
+[~, msg, ~] = mkdir([dirName, '/PCinPLY']);
+if ~isempty(msg)
+    disp(msg);
+end
+[~, msg, ~] = mkdir([dirName,'/PCinXYZNorTri']);
+if ~isempty(msg)
+    disp(msg);
+end
 
 % For each name given in the list read the depth image file and convert the raw
 % depth into a X, Y, and Z coordinates. Also read the corresponding merged
@@ -81,7 +91,7 @@ for iNTF=startIndx:samplingRate:endIndx
             fullDepthFileName = [dirName, '/', depthFileName];
             fullMergedFileName = [dirName, '/', mergedFileName];
             if(exist(fullDepthFileName, 'file') == 2)
-                flyDistTh = 0.02;
+                flyDistTh = 1.2;
                 flyWinSize = 3;
                 depthImg = imread(fullDepthFileName);
                 mergedImg = imread(fullMergedFileName);
@@ -125,8 +135,8 @@ for iNTF=startIndx:samplingRate:endIndx
         
         % Create XYZ, Nor and Tri files for each point cloud which could be used 
         % to register to with each other to create a complete 3D point cloud.
-        binDir = [dirName, '/PCinXYZNorTri/'];
-        CreateXYZTriNor(dataXYZ, binDir, iNTF);
+%         binDir = [dirName, '/PCinXYZNorTri/'];
+%         CreateXYZTriNor(dataXYZ, binDir, iNTF);
     else
         disp("Couldn't create a point cloud because it's empty.");
     end

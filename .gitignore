@@ -8,3 +8,7 @@
 
 # No unit test files
 UT_*
+
+# No unnecessary folders
+Backup/*
+Plus/*
