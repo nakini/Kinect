@@ -7,13 +7,18 @@ function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh)
 %
 % INPUT(s):
 %   data3D      : Structure containing X, Y and Z values for each pixel
-%   flyWinSize  : Window size, usuall 1 or 2
+%   flyWinSize  : Window size, usually 1 or 2
 %   flyWinTh    : Flot values such as 0.08, 0.1, etc.
 %
 % OUTPUT(s):
 %   indxSurfels : Valid indices
-%   z3D         : Upadated data values
+%   z3D         : Updated data values
+%
+% EXAMPLE(s):
+%
 
+%^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+%------------------------------- START -----------------------------------------
 [maxR, maxC] = size(data.x3D);          % Image matrix size
 distMat = zeros(maxR, maxC);            % Matrix for dist values
 

@@ -14,8 +14,8 @@ function ConvertRawDepth2ColorPly(dirName, maxDepthInMeters, KinectType, ...
 %               complete 3D point cloud.
 %   numPCs      : Total number of point clouds from which the 3D model will be 
 %               created.
-%   samplingRate: The difference between two consequtive images (Default = 1)
-%   CenterFlag  : Weither or not to move the point cloud to the center 
+%   samplingRate: The difference between two consecutive images (Default = 1)
+%   CenterFlag  : Whether or not to move the point cloud to the center 
 %               (Default: No Centering)
 %
 % OUTPUTs:

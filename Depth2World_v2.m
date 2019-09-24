@@ -2,12 +2,12 @@ function [Xw, Yw, Zw, Rw,Gw,Bw, varargout] = Depth2World_v2(depthImg, ...
     maxDepth, flyWinSize, flyDistTh, mergedImg, KK)
 % This function converts the depth values in meters to world coordinates. The 
 % input is a MxN matrix and the out will be M*Nx3 matrix. To convert the depth 
-% into world coordiantes we need the instrinsic parameters of the depth camera.
+% into world coordinates we need the intrinsic parameters of the depth camera.
 % And if we want to translate them to the RGB camera frame we also need 
 % extrinsic parameters.
 %
 % INPUTs:
-%   fileName    : Depth image file name
+%   depthImg    : 512x512 depth image
 %   maxDepth    : Maximum depth which is set by the user
 %   flyWinSize  : Window size which will be used to get rid of flying pixels
 %   flyDistTh   : Threshold to determine whether to keep/discard pixels after  
@@ -16,10 +16,15 @@ function [Xw, Yw, Zw, Rw,Gw,Bw, varargout] = Depth2World_v2(depthImg, ...
 %
 % OUTPUTs:
 %   Xw, Yw, Zw  : X, Y, Z values for each pixel
-%   Rw, Gw, Bw  : Color informatio for each pixel
-%   indCommonValid : Valid indices from which the XYZ and RGB values have been
-%                   evaluated
+%   Rw, Gw, Bw  : Color information for each pixel
+%   varargout   : Other information such as: 
+%       indCommonValid: Valid indices from which the XYZ and RGB values have
+%                   been evaluated
+%       x3D, y3D, z3D : Noisy 3D points
 %
+%
+% Example(s):
+%   [X, Y, Z] = Depth2World_v2(depthImg, maxDepth, 3, 1.2, [], KK_IR);
 
 %^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 %------------------------------- START -----------------------------------------

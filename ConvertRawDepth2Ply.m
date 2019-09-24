@@ -10,14 +10,14 @@ function ConvertRawDepth2Ply(dirName, maxDepthInMeters, KinectType, ...
 %   KinectType  : Either Kinect-360(v1) or Kinect-ONE(v2)
 %   startIndx   : First file number that has to be evaluated
 %   endIndx     : Last file number that needs to be processed
-%   samplingRate: The difference between two consequtive images (Default = 1)
+%   samplingRate: The difference between two consecutive images (Default = 1)
 %   denoiseParams   : Parameters for denoising the point cloud.
 %       1) flyWinSize   : Window size which will be used to get rid of flying pixels
 %       2) flyDistTh    : Threshold to determine whether to keep/discard pixels after  
 %                       the flying window operation
 %   calibIR     : The mat file containing the calibration parameters of the IR
 %               sensor.
-%   CenterFlag  : Weither or not to move the point cloud to the center 
+%   CenterFlag  : Whether or not to move the point cloud to the center 
 %               (Default: No Centering)
 %
 % OUTPUTs:

@@ -19,7 +19,15 @@ function [mergedPC, dataXYZs, dataRGBs] = MapColorFrameToDepthSpace(depthImg, ..
 %               pixels.
 %
 % EXAMPLE(s):
+%   load(calibStereo, 'R', 'T', 'KK_left', 'KK_right');
+%   tformDepth2RGB.R = inv(R);
+%   tformDepth2RGB.T = -inv(R)*T/1000;
+%   tformDepth2RGB.KK_RGB = KK_left;
+%   tformDepth2RGB.KK_IR = KK_right;
+%   denoiseParamsStruct = struct('flyWinSize', 3, 'flyDistTh', 1.2)
 %
+%   [~, dataXYZ, dataRGB] = MapColorFrameToDepthSpace(depthImg, ...
+%     rgbImg, tformDepth2RGB, maxDepthInMeters,denoiseParamsStruct);
 
 %^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 %------------------------------- START -----------------------------------------

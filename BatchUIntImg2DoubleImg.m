@@ -1,5 +1,5 @@
 function BatchUIntImg2DoubleImg(dirName, fileNum, imgName, hist_eq_flag)
-% This function convertes all the images in a floder. The original images 
+% This function converts all the images in a folder. The original images 
 % are of type uint16 and the converted images are of type double.
 %
 % INPUTs:

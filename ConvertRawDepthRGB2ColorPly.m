@@ -14,7 +14,7 @@ function imgCounts = ConvertRawDepthRGB2ColorPly(dirName, maxDepthInMeters, Kine
 %       startIndx   : Starting number of the file which will be included in the
 %                   complete 3D point cloud.
 %       endIndx     : Last image number that need to be processed
-%       samplingRate: The difference between two consequtive images (Default = 1)
+%       samplingRate: The difference between two consecutive images (Default = 1)
 %   denoiseParamsStruct   : Parameters for denoising the point cloud.
 %       1) flyWinSize   : Window size which will be used to get rid of flying pixels
 %       2) flyDistTh    : Threshold to determine whether to keep/discard pixels after
@@ -24,6 +24,7 @@ function imgCounts = ConvertRawDepthRGB2ColorPly(dirName, maxDepthInMeters, Kine
 %
 % OUTPUT(s):
 %   imgCounts   : Count of images that are being process
+%
 % Example(s):
 %   imgCounts = ConvertRawDepthRGB2ColorPly('/media/tnb88/My Passport/PhD/
 %       Data/Alvaro/2017_0825/103/SampleImages/', 2, 'v2', {},  

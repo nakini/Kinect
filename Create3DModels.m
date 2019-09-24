@@ -12,7 +12,9 @@ function Create3DModels(dirName, startIndx, endIndx, samplingRate)
 %
 % OUTPUT(s):
 %
-
+%
+% Example(s):
+%
 %-------------------------------------------------------------------------------
 %------------------------------- START -----------------------------------------
 
@@ -75,7 +77,7 @@ end
 function trnsForm = ReadTransformationFile(rtFileName)
 % This function will read the pre-stored RT file and return the R and T info as
 % a structure. If the R/T values are already available in a text file then read 
-% it or else create a structu with default values.
+% it or else create a structure with default values.
 if exist(rtFileName, 'file') == 2
     rtMat = dlmread(rtFileName);
     trnsForm.R = rtMat(1:3, 1:3);

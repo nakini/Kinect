@@ -1,14 +1,14 @@
 function FindTransformation_PairWise(dirName, startIndx, endIndx)
 % This function reads ply files generated from each depth image and subsequently
 % calls the 'RegistrationGUI.mlapp' GUI app to register two pairs of point 
-% cloudsfor, say Model and Data point cloud. The transformation will be from 
+% clouds, say Model and Data point cloud. The transformation will be from 
 % Data to Model pc.
 %
 % First, it will load 1st and 2nd pc in which the 1st will become the Model and 
 % the 2nd will become the Data pc. Using the GUI it will find out the 
 % transformation from 2nd to 1st. Then it will load 2nd and 3rd in which 2nd will
 % become the Model and 3rd will become Data. Again, the transformation will be 
-% calculated from 3rd to 2nd. This process will be repeated untill all pair wise
+% calculated from 3rd to 2nd. This process will be repeated until all pair wise
 % transformation is evaluated.
 %
 % INPUT(s):
@@ -26,7 +26,7 @@ function FindTransformation_PairWise(dirName, startIndx, endIndx)
 % The outer while loop will look for the first existing pc and the inner loop
 % will check for the 2nd pc. The 1st pc will be termed as the Anchor and the 2nd
 % will be the Moved pc. Always load 2 files at a time and find the
-% correspondence between them, such as at first find the corresnpondence between
+% correspondence between them, such as at first find the correspondence between
 %  1st and 2nd pc, then 2nd and 3rd, then 3rd and 4th, so on and so forth.
 while startIndx < endIndx
     % Begin the search for the 1st point cloud

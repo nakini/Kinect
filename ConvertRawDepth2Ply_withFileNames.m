@@ -11,7 +11,7 @@ function ConvertRawDepth2Ply(dirName, maxDepthInMeters, KinectType, ...
 %               complete 3D point cloud.
 %   numPCs      : Total number of point clouds from which the 3D model will be 
 %               created.
-%   samplingRate: The difference between two consequtive images.
+%   samplingRate: The difference between two consecutive images.
 %   KinectType  : Either Kinect-360(v1) or Kinect-ONE(v2)
 %   Mode        : Now this program can read both text and image files. 
 %               1 -- text files (Not a good idea to store image as a text file.
