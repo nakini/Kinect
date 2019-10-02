@@ -1,8 +1,8 @@
-function tformPC2toPC1 = EstimateTformMatchingRGB(pcStruct1, pcStruct2)
-% rgbPts1, pc1, rgbPts2, pc2, tformDepth2RGB)
+function [tformPC2toPC1, matchPtsCount, regStatus] = ...
+    EstimateTformMatchingRGB(pcStruct1, pcStruct2)
 % In this function given the RGB points and the corresponding point clouds, I am
 % going to findout the 3D points that correspond to the RGB points. Then, using
-% the matching 3D points I am going to estimate the transfomation between the 
+% the matching 3D points I am going to estimate the transformation between the 
 % point clouds.
 %
 % INPUT(s):
@@ -17,6 +17,10 @@ function tformPC2toPC1 = EstimateTformMatchingRGB(pcStruct1, pcStruct2)
 % OUTPUT(s):
 %   tformPC2toPC1   := Structure having rotation R and translation T from
 %           pc2 to pc1
+%   matchPtsCount   := Number of matching points in two images.
+%   regStatus       := Status flag that will indicate whether a transformation
+%           matrix is evaluated or just set to defaul values for R and T. 0 on
+%           success and 1 on failure
 %
 % Example(s):
 %
@@ -58,10 +62,20 @@ for i = 1:numPts
     end
 end
 
-% Now, estimate the rotation and translation between two point clouds
-pcMatch1 = pcMatch1(1:pcRowNum-1, :);
-pcMatch2 = pcMatch2(1:pcRowNum-1, :);
-[R, T] = EstimateRT(pcMatch2', pcMatch1');     % The fun needs 3xN matrices
+% Now, estimate the rotation and translation between two point clouds - At least
+% we need 3 non-linear points to estimate the rotation matrix. So, I choose 5
+% instead of 3 to make sure that all of them don't lie on the same plane.
+if pcRowNum > 5
+    pcMatch1 = pcMatch1(1:pcRowNum-1, :);
+    pcMatch2 = pcMatch2(1:pcRowNum-1, :);
+    [R, T] = EstimateRT(pcMatch2', pcMatch1');     % The function needs 3xN matrices
+    regStatus = 0;
+else
+    R = eye(3);
+    T = ones(3,1);
+    regStatus = 1;
+end
 
-% Bundle up
+% Bundle up for returning the values
+matchPtsCount = pcRowNum;
 tformPC2toPC1 = struct('R', R, 'T', T);

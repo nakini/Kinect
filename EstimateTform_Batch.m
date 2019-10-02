@@ -107,8 +107,15 @@ while startIndx < endIndx
                     'tformDepth2RGB', tformDepth2RGB);
                 pcStructMoved = struct('rgbPts', inlierPtsMoved, 'pc', pcMoved, ...
                     'tformDepth2RGB', tformDepth2RGB);
-                tformMoved2Anchor = EstimateTformMatchingRGB(pcStructAnch, ...
-                    pcStructMoved);
+                [tformMoved2Anchor, matchPtsCount, regStats] = ...
+                    EstimateTformMatchingRGB(pcStructAnch, pcStructMoved);
+                if regStats ~= 1
+                    disp(['Unable to register pc ', pcNameAnch, 'and', ...
+                        pcNameMoved, 'as number of matching points were ', ...
+                        matchPtsCount])
+                else
+                    disp(['Number of matched points are: ', matchPtsCount]);
+                end
                 
                 % Save the transformation matrix into a file
                 rtNameMoved = ['rt_', num2str(movedNum), '.txt'];
