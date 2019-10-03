@@ -23,8 +23,13 @@ function [tformPC2toPC1, matchPtsCount, regStatus] = ...
 %           success and 1 on failure
 %
 % Example(s):
-%
-%
+%   pcStructAnch = struct('rgbPts', inlierPtsAnch, 'pc', pcAnch, ...
+%       'tformDepth2RGB', tformDepth2RGB);
+%   pcStructMoved = struct('rgbPts', inlierPtsMoved, 'pc', pcMoved, ...
+%       'tformDepth2RGB', tformDepth2RGB);
+%   [tformMoved2Anchor, matchPtsCount, regStats] = ...
+%       EstimateTformMatchingRGB(pcStructAnch, pcStructMoved);
+
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
 

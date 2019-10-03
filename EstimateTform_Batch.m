@@ -17,9 +17,8 @@ function EstimateTform_Batch(dirName, startIndx, endIndx, pcDirName, ...
 % OUTPUT(s):
 %
 % Example:
-%   dirName = ~/Dropbox/PhD/Data/Data/Alvaro/2017_0825/103/SampleImages/;
-%   geomEstParams = struct('tformType', 'projective', 'maxDist', 50.5);
-%   FindTransformation(dirName, 1250, 1262, geomEstParams)
+%   dirName = '~/Dropbox/PhD/Data/Data/Alvaro/2017_0825/103/SampleImages/';
+%   EstimateTform_Batch(dirName, 1250, 1259, [], [], [], 1)
 
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
@@ -59,6 +58,14 @@ while startIndx < endIndx
     % look for the Moved image.
     if exist(rgbFullNameAnch, 'file') == 2
         rgbImgAnch = imread(rgbFullNameAnch);               % Read 1st image
+        
+        % Check for the corresponding R|T text file. If it doesn't exist the
+        % create one with default values.
+        rtNameAnch = ['rt_', num2str(anchNum), '.txt'];
+        rtFullNameAnch = [dirName, '/', pcDirName, '/', rtNameAnch];
+        if ~(exist(rtFullNameAnch, 'file') == 2)
+            WriteRT(struct('R', eye(3,3), 'T', zeros(3,1)), rtFullNameAnch);
+        end
         
         % Now, look for the next RGB image
         startIndx = startIndx + 1;
@@ -109,12 +116,12 @@ while startIndx < endIndx
                     'tformDepth2RGB', tformDepth2RGB);
                 [tformMoved2Anchor, matchPtsCount, regStats] = ...
                     EstimateTformMatchingRGB(pcStructAnch, pcStructMoved);
-                if regStats ~= 1
+                if regStats ~= 0
                     disp(['Unable to register pc ', pcNameAnch, 'and', ...
                         pcNameMoved, 'as number of matching points were ', ...
-                        matchPtsCount])
+                        num2str(matchPtsCount)])
                 else
-                    disp(['Number of matched points are: ', matchPtsCount]);
+                    disp(['Number of matched points are: ', num2str(matchPtsCount)]);
                 end
                 
                 % Save the transformation matrix into a file
