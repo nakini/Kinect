@@ -1,5 +1,5 @@
 function EstimateTform_Batch(dirName, startIndx, endIndx, pcDirName, ...
-    geomEstParams, calibStereo, dispFlag)
+    geomEstParams, calibStereo, dispFlag, cornerDetectionTech)
 % In this function, I am going to read two images from a given folder then
 % estimate the transformation between the two using the RGB images and their
 % corresponding point clouds.
@@ -13,12 +13,14 @@ function EstimateTform_Batch(dirName, startIndx, endIndx, pcDirName, ...
 %       outlier in pair of matching points.
 %   calibStereo     := Stereo calibration parameters between IR and RGB of the 
 %       Kinect that was used to collect the data.
+%   dispFlag        := 0/1 to display the final registered point clouds
+%   cornerDetectionTech     := Either automatic (SURF|Harris) or manual (UserDefine) 
 %
 % OUTPUT(s):
 %
 % Example:
 %   dirName = '~/Dropbox/PhD/Data/Data/Alvaro/2017_0825/103/SampleImages/';
-%   EstimateTform_Batch(dirName, 1250, 1259, [], [], [], 1)
+%   EstimateTform_Batch(dirName, 1250, 1259, [], [], [], 1, 'UserDefined')
 
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
@@ -44,6 +46,10 @@ end
 % Display pair of point clouds.
 if nargin < 7 || isempty(dispFlag)
     dispFlag = 0;       % By default don't display the point clouds
+end
+% Corner detection technique --
+if nargin < 8 || isempty(cornerDetectionTech)
+    cornerDetectionTech = 'SURF';
 end
 
 % Load a pair of images at a time and find the correspondence.
@@ -78,18 +84,13 @@ while startIndx < endIndx
             % IF the file is found then set it as the moved point cloud and then
             % find the correspondence between the two images
             if exist(rgbNameFullMoved, 'file') == 2
-                % Display the image names that were matched
+                % Display the image names that were supposed to be matched
                 fprintf('Matching -- %s and %s\n\n', rgbNameAnch, rgbNameMoved);
                 
-                % Read the second point cloud
+                % Read the second RGB image
                 rgbImgMoved = imread(rgbNameFullMoved);     % Read 2nd image
                 
-                % Find the matching point between two images.
-                matchTech = 'SURF';
-                [inlierPtsAnch, inlierPtsMoved] = FindMatchedPoints(...
-                    rgbImgAnch, rgbImgMoved, matchTech, geomEstParams, 1);
-                
-                % Now read the 3D point clouds
+                % Now, read the corresponding 3D point clouds
                 pcNameAnch = ['depthImg_', num2str(anchNum), '.ply'];
                 pcFullNameAnch = [dirName, '/', pcDirName, '/', pcNameAnch];
                 pcAnch = pcread(pcFullNameAnch);
@@ -97,25 +98,74 @@ while startIndx < endIndx
                 pcFullNameMoved = [dirName, '/', pcDirName, '/', pcNameMoved];
                 pcMoved = pcread(pcFullNameMoved);
                 
-                % Load the transformaion parameters. If you have Depth-to-RGB
-                % then use it directly or else take the inverse of RGB-to-Depth
-                % parameters.
+                % Also, read the calibraiton parameters and create a structure 
+                % to holding transformation matrix, etc...
+                % Load the transformaion parameters. If you have Depth-to-
+                % RGB then use it directly or else take the inverse of RGB-
+                % to-Depth parameters.
                 load(calibStereo, 'R', 'T', 'KK_left', 'KK_right');
-                % Create as strucutre that will hold R matrix and T vector only.
+                % Create as strucutre that will hold R matrix & T vector and
+                % the intrinsic parameters of each camera.
                 tformDepth2RGB.R = inv(R);
                 % Convert into Meters as the PC is in Meters
                 tformDepth2RGB.T = -inv(R)*T/1000;
                 tformDepth2RGB.KK_RGB = KK_left;
                 tformDepth2RGB.KK_IR = KK_right;
+                    
+                % Prepare data for matching two RGB images -- Detect corners
+                % either automatically (SURF | Harris) or provide them by
+                % projecting the point clouds onto the RGB images.
+                if strcmpi(cornerDetectionTech, 'SURF') || ...
+                        strcmpi(cornerDetectionTech, 'Harris')
+                    % This method uses the automatic corner detection technique,
+                    % so we don't have to find out the 2D point.
+                    points2DAnch = [];
+                    points2DMoved = [];
+                elseif strcmpi(cornerDetectionTech, 'UserDefined')
+                    % In this case, we are not using the any automatic corner
+                    % detection technique. Instead, we are providing the
+                    % projection of 3D point on the RGB image as the corner 
+                    % points.
+                    
+                    % Project those 3D points onto their corresponding images
+                    % using the intrinsic and extrinsic matrix of the Kinect IR
+                    % and RGB camera
+                    pcAnchInRGBFrame = TransformPointCloud(pcAnch, tformDepth2RGB);
+                    pcMovedInRGBFrame = TransformPointCloud(pcMoved, tformDepth2RGB);
+                    
+                    % Get the UV values of those projected points on the RGB
+                    % images
+                    rgbUVsAnch = ProjectPointsOnImage(pcAnchInRGBFrame.Location, ...
+                        tformDepth2RGB.KK_RGB);
+                    rgbUVsAnch = round(rgbUVsAnch);
+                    rgbUVsMoved = ProjectPointsOnImage(pcMovedInRGBFrame.Location, ...
+                        tformDepth2RGB.KK_RGB);
+                    rgbUVsMoved = round(rgbUVsMoved);
+
+                    % Create the point cloud object so that it could be used in
+                    % feature extraction process.
+                    points2DAnch = cornerPoints(rgbUVsAnch);
+                    points2DMoved = cornerPoints(rgbUVsMoved);
+                else
+                    error('Matching type should be SURF | Harris | UserDefined');
+                end
+                
+                % Find the matching point between two images.
+                matchingStruct = struct('technique', cornerDetectionTech, ...
+                    'points1', points2DAnch , 'points2', points2DMoved);
+                [inlierPtsAnch, inlierPtsMoved] = FindMatchedPoints(...
+                    rgbImgAnch, rgbImgMoved, matchingStruct, geomEstParams, 1);
                 
                 % Estimate the transfomation from the two point cloud using the
-                % RGB matchin points.
+                % RGB matching points.
                 pcStructAnch = struct('rgbPts', inlierPtsAnch, 'pc', pcAnch, ...
                     'tformDepth2RGB', tformDepth2RGB);
                 pcStructMoved = struct('rgbPts', inlierPtsMoved, 'pc', pcMoved, ...
                     'tformDepth2RGB', tformDepth2RGB);
                 [tformMoved2Anchor, matchPtsCount, regStats] = ...
                     EstimateTformMatchingRGB(pcStructAnch, pcStructMoved);
+                % Check the registration status, i.e., whether it succeeded or
+                % failed.
                 if regStats ~= 0
                     disp(['Unable to register pc ', pcNameAnch, 'and', ...
                         pcNameMoved, 'as number of matching points were ', ...

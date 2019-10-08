@@ -38,7 +38,7 @@ function [tformPC2toPC1, matchPtsCount, regStatus] = ...
 pc1InRGBFrame = TransformPointCloud(pcStruct1.pc, pcStruct1.tformDepth2RGB);
 pc2InRGBFrame = TransformPointCloud(pcStruct2.pc, pcStruct2.tformDepth2RGB);
 
-% Get the RGB values of those projected points in a different variable
+% Get the UV coordinates of those projected points on the RGB images
 rgbUVs1 = ProjectPointsOnImage(pc1InRGBFrame.Location, ...
     pcStruct1.tformDepth2RGB.KK_RGB);
 rgbUVs1 = round(rgbUVs1);
@@ -66,13 +66,14 @@ for i = 1:numPts
         pcRowNum = pcRowNum + 1;
     end
 end
+pcRowNum = pcRowNum - 1;
 
 % Now, estimate the rotation and translation between two point clouds - At least
 % we need 3 non-linear points to estimate the rotation matrix. So, I choose 5
 % instead of 3 to make sure that all of them don't lie on the same plane.
 if pcRowNum > 5
-    pcMatch1 = pcMatch1(1:pcRowNum-1, :);
-    pcMatch2 = pcMatch2(1:pcRowNum-1, :);
+    pcMatch1 = pcMatch1(1:pcRowNum, :);
+    pcMatch2 = pcMatch2(1:pcRowNum, :);
     [R, T] = EstimateRT(pcMatch2', pcMatch1');     % The function needs 3xN matrices
     regStatus = 0;
 else
