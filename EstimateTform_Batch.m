@@ -1,20 +1,37 @@
-function EstimateTform_Batch(dirName, startIndx, endIndx, pcDirName, ...
-    geomEstParams, calibStereo, dispFlag, cornerDetectionTech)
+function EstimateTform_Batch(dirStruct, imgNumStruct, geomParamsStruct, ...
+    calibStereo, dispFlag, cornerTech)
 % In this function, I am going to read two images from a given folder then
-% estimate the transformation between the two using the RGB images and their
-% corresponding point clouds.
+% estimate the matching between the two using the RGB images. For all the
+% matched pixels I will figure out the corresponding 3D points for each RGB
+% image. Then, I will use these 3D points pairs as the matching pairs to figure
+% out the transformation between two points clouds.
+%
+% For the matching part, I will have two methods to find out the corner points
+% in the image -- 1) Use one of the those automatic feature detection technique 
+% or 2) Project the 3D points onto the RGB image and use them as the feature
+% points.
+%
 % INPUT(s):
-%   dirName         := Directory containing the RGB/Depth images and the
-%       corresponding ply files.
-%   startIndx       := File number of 1st pc
-%   endIndx         := Last file number
-%   pcDirName       := Directory that contains the 3D point clouds in ply format
-%   geomEstParams   := Parameters for matching the two images and removing
-%       outlier in pair of matching points.
-%   calibStereo     := Stereo calibration parameters between IR and RGB of the 
-%       Kinect that was used to collect the data.
+%   dirStruct       := Directory structure containing the RGB/Depth images and
+%           the corresponding 'ply' files and the 'rt' files.
+%       1) dirName      -- Name of the folder containing the depth and RGB images
+%       2) plyFolderName-- Name of the folder relative to 'dirName' containing
+%           the ply files.
+%       3) rtFolderName -- Name of the folder relative to 'dirName' holding all
+%           the text files which contain the R|T information.
+%   imgNumStruct    := Structure holding the stand and end number of a sequence
+%           of images which need to be processed
+%       1) startIndx    -- File number of 1st pc
+%       2) endIndx      -- Last file number
+%   geomParamsStruct:= Parameters for matching the two images and removing
+%           outlier in pair of matching points. (For more information, look at
+%           the 'estimateGeometricTransform()' help document.
+%       1) tformType    -- It could be similarity|affine|projective
+%       2) maxDist      -- Maximum distance from point to projection
+%   calibStereo     := Mat-file holding stereo calibration parameters between 
+%           IR and RGB of the Kinect that was used to collect the data.
 %   dispFlag        := 0/1 to display the final registered point clouds
-%   cornerDetectionTech     := Either automatic (SURF|Harris) or manual (UserDefine) 
+%   cornerTech      := Either automatic (SURF|Harris) or manual (UserDefined) 
 %
 % OUTPUT(s):
 %
@@ -24,41 +41,36 @@ function EstimateTform_Batch(dirName, startIndx, endIndx, pcDirName, ...
 
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
-% Directory cotaining the images
-if nargin < 3               
-    error('Provide the directory name containing the images');
+% Directory containing the images
+if nargin < 2
+    error('Provide the directory name containing the images and number sequence');
 end
-% Name of the folder where point clouds will be saved
-if nargin < 4 || isempty(pcDirName)
-    % This is the default name I have been using
-    pcDirName = 'PCinPLY';
-end
-% Parameters to be used to match 2 rgb images
-if nargin < 5 || isempty(geomEstParams)
-    geomEstParams = struct('tformType', 'projective', 'maxDist', 3.5);
+% Parameters to be used to match 2 RGB images
+if nargin < 3 || isempty(geomParamsStruct)
+    geomParamsStruct = struct('tformType', 'projective', 'maxDist', 3.5);
 end
 % Calibration parameters of the Kinect sensors
-if nargin < 6 || isempty(calibStereo)
+if nargin < 4 || isempty(calibStereo)
     calibStereo = ['~/Dropbox/PhD/Data/Calibration/', ...
         'Calibration_20181114/HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
     disp('WARNING!!! -- Loading the handheld kinect parameters');
 end
 % Display pair of point clouds.
-if nargin < 7 || isempty(dispFlag)
+if nargin < 5 || isempty(dispFlag)
     dispFlag = 0;       % By default don't display the point clouds
 end
 % Corner detection technique --
-if nargin < 8 || isempty(cornerDetectionTech)
-    cornerDetectionTech = 'SURF';
+if nargin < 6 || isempty(cornerTech)
+    cornerTech = 'SURF';
 end
 
 % Load a pair of images at a time and find the correspondence.
-while startIndx < endIndx
+while imgNumStruct.startIndx < imgNumStruct.endIndx
     % In the begining, make the 1st found image as the anchor image. After that,
-    % however, make the 'moved' image as the achor image.
-    anchNum = startIndx;
+    % however, make the 'moved' image as the anchor image.
+    anchNum = imgNumStruct.startIndx;
     rgbNameAnch = ['rgbImg_', num2str(anchNum), '.jpg'];
-    rgbFullNameAnch = [dirName, '/', rgbNameAnch];
+    rgbFullNameAnch = [dirStruct.dirName, '/', rgbNameAnch];
     
     % IF the file is available read it and set it as the Anchor image and then
     % look for the Moved image.
@@ -68,18 +80,19 @@ while startIndx < endIndx
         % Check for the corresponding R|T text file. If it doesn't exist the
         % create one with default values.
         rtNameAnch = ['rt_', num2str(anchNum), '.txt'];
-        rtFullNameAnch = [dirName, '/', pcDirName, '/', rtNameAnch];
+        rtFullNameAnch = [dirStruct.dirName, '/', dirStruct.rtFolderName, ...
+            '/', rtNameAnch];
         if ~(exist(rtFullNameAnch, 'file') == 2)
             WriteRT(struct('R', eye(3,3), 'T', zeros(3,1)), rtFullNameAnch);
         end
         
         % Now, look for the next RGB image
-        startIndx = startIndx + 1;
-        while startIndx < endIndx
-            movedNum = startIndx;
+        imgNumStruct.startIndx = imgNumStruct.startIndx + 1;
+        while imgNumStruct.startIndx < imgNumStruct.endIndx
+            movedNum = imgNumStruct.startIndx;
             % Read anchored and moved point cloud
             rgbNameMoved = ['rgbImg_', num2str(movedNum), '.jpg'];
-            rgbNameFullMoved = [dirName, '/', rgbNameMoved];
+            rgbNameFullMoved = [dirStruct.dirName, '/', rgbNameMoved];
             
             % IF the file is found then set it as the moved point cloud and then
             % find the correspondence between the two images
@@ -92,19 +105,21 @@ while startIndx < endIndx
                 
                 % Now, read the corresponding 3D point clouds
                 pcNameAnch = ['depthImg_', num2str(anchNum), '.ply'];
-                pcFullNameAnch = [dirName, '/', pcDirName, '/', pcNameAnch];
+                pcFullNameAnch = [dirStruct.dirName, '/', ...
+                    dirStruct.plyFolderName, '/', pcNameAnch];
                 pcAnch = pcread(pcFullNameAnch);
                 pcNameMoved = ['depthImg_', num2str(movedNum), '.ply'];
-                pcFullNameMoved = [dirName, '/', pcDirName, '/', pcNameMoved];
+                pcFullNameMoved = [dirStruct.dirName, '/', ...
+                    dirStruct.plyFolderName, '/', pcNameMoved];
                 pcMoved = pcread(pcFullNameMoved);
                 
-                % Also, read the calibraiton parameters and create a structure 
+                % Also, read the calibration parameters and create a structure 
                 % to holding transformation matrix, etc...
-                % Load the transformaion parameters. If you have Depth-to-
+                % Load the transformation parameters. If you have Depth-to-
                 % RGB then use it directly or else take the inverse of RGB-
                 % to-Depth parameters.
                 load(calibStereo, 'R', 'T', 'KK_left', 'KK_right');
-                % Create as strucutre that will hold R matrix & T vector and
+                % Create as structure that will hold R matrix & T vector and
                 % the intrinsic parameters of each camera.
                 tformDepth2RGB.R = inv(R);
                 % Convert into Meters as the PC is in Meters
@@ -115,13 +130,13 @@ while startIndx < endIndx
                 % Prepare data for matching two RGB images -- Detect corners
                 % either automatically (SURF | Harris) or provide them by
                 % projecting the point clouds onto the RGB images.
-                if strcmpi(cornerDetectionTech, 'SURF') || ...
-                        strcmpi(cornerDetectionTech, 'Harris')
+                if strcmpi(cornerTech, 'SURF') || ...
+                        strcmpi(cornerTech, 'Harris')
                     % This method uses the automatic corner detection technique,
                     % so we don't have to find out the 2D point.
                     points2DAnch = [];
                     points2DMoved = [];
-                elseif strcmpi(cornerDetectionTech, 'UserDefined')
+                elseif strcmpi(cornerTech, 'UserDefined')
                     % In this case, we are not using the any automatic corner
                     % detection technique. Instead, we are providing the
                     % projection of 3D point on the RGB image as the corner 
@@ -151,12 +166,12 @@ while startIndx < endIndx
                 end
                 
                 % Find the matching point between two images.
-                matchingStruct = struct('technique', cornerDetectionTech, ...
+                matchingStruct = struct('technique', cornerTech, ...
                     'points1', points2DAnch , 'points2', points2DMoved);
-                [inlierPtsAnch, inlierPtsMoved] = FindMatchedPoints(...
-                    rgbImgAnch, rgbImgMoved, matchingStruct, geomEstParams, 1);
+                [inlierPtsAnch, inlierPtsMoved] = FindMatchedPoints(rgbImgAnch, ...
+                    rgbImgMoved, matchingStruct, geomParamsStruct, dispFlag);
                 
-                % Estimate the transfomation from the two point cloud using the
+                % Estimate the transformation from the two point cloud using the
                 % RGB matching points.
                 pcStructAnch = struct('rgbPts', inlierPtsAnch, 'pc', pcAnch, ...
                     'tformDepth2RGB', tformDepth2RGB);
@@ -167,16 +182,23 @@ while startIndx < endIndx
                 % Check the registration status, i.e., whether it succeeded or
                 % failed.
                 if regStats ~= 0
-                    disp(['Unable to register pc ', pcNameAnch, 'and', ...
-                        pcNameMoved, 'as number of matching points were ', ...
-                        num2str(matchPtsCount)])
+                    statusStr = string(['FAILED to register ', pcNameAnch, ' and ', ...
+                        pcNameMoved, '. Number of matching points -- "', ...
+                        num2str(matchPtsCount), '"\n']);
                 else
-                    disp(['Number of matched points are: ', num2str(matchPtsCount)]);
+                    statusStr = string(['Succeded to register ', pcNameAnch, ' and ', ...
+                        pcNameMoved, '. Number of matching points -- "', ...
+                        num2str(matchPtsCount), '"\n']);
                 end
+                disp(statusStr);
+                logFileName = [dirStruct.dirName, '/', dirStruct.rtFolderName, ...
+                    '/Log-', date, '.txt'];
+                LogInfo(logFileName, statusStr);
                 
                 % Save the transformation matrix into a file
                 rtNameMoved = ['rt_', num2str(movedNum), '.txt'];
-                rtFullNameMoved = [dirName, '/', pcDirName, '/', rtNameMoved];
+                rtFullNameMoved = [dirStruct.dirName, '/', ...
+                    dirStruct.rtFolderName, '/', rtNameMoved];
                 WriteRT(tformMoved2Anchor, rtFullNameMoved);
                 
                 % If needed display the point cloud
@@ -189,11 +211,11 @@ while startIndx < endIndx
                 break;
             else
                 % Go to the next image
-                startIndx = startIndx + 1;
+                imgNumStruct.startIndx = imgNumStruct.startIndx + 1;
             end
         end
     else
         % Go to the next image
-        startIndx = startIndx + 1;
+        imgNumStruct.startIndx = imgNumStruct.startIndx + 1;
     end
 end
