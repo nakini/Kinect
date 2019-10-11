@@ -167,7 +167,7 @@ while imgNumStruct.startIndx < imgNumStruct.endIndx
                 
                 % If needed display the point cloud
                 if dispFlag == 1
-                    DisplayPCs();
+                    DisplayPCs(pcAnch, pcMoved, tformMoved2Anchor);
                 end
                 break;
             else
