@@ -30,15 +30,23 @@ function EstimateTform_Batch(dirStruct, imgNumStruct, geomParamsStruct, ...
 %       2) maxDist      -- Maximum distance from point to projection
 %   calibStereo     := Mat-file holding stereo calibration parameters between 
 %           IR and RGB of the Kinect that was used to collect the data.
-%   dispFlag        := 0/1 to display the final registered point clouds
+%   dispFlag        := Flag to display or not the matched pixels in the image
+%           pair and the final transformed point cloud pair
+%       1) pcPair       -- [0]/1 to display the final registered point clouds
+%       2) matchPair    -- [0]/1 to display matched pair of pixels
 %   cornerTech      := Either automatic (SURF|Harris) or manual (UserDefined) 
 %
 % OUTPUT(s):
 %
 % Example:
-%   dirName = '~/Dropbox/PhD/Data/Data/Alvaro/2017_0825/103/SampleImages/';
-%   EstimateTform_Batch(dirName, 1250, 1259, [], [], [], 1, 'UserDefined')
-
+%   dirStruct = struct('dirName', '/home/fovea/tnb88/Dropbox/PhD/Data/Data/Alvaro/
+%       2017_0825/103/SampleImages/', 'plyFolderName', 'PCinPLY_woPlane_Testing', 
+%       'rtFolderName', 'PCinXYZNorTri_woPlane_Testing'),
+%   imgNumStruct = struct('startIndx', 1250, 'endIndx',1260);
+%   geomParamsStruct = struct('tformType', 'projective', 'maxDist', 3.5);
+%   dispFlag = struct('pcPair', 0, 'matchPair', 0)
+%   EstimateTform_Batch(dirStruct, imgNumStruct, geomParamsStruct, [], [], 
+%       'UserDefined')
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
 % Directory containing the images
@@ -57,7 +65,8 @@ if nargin < 4 || isempty(calibStereo)
 end
 % Display pair of point clouds.
 if nargin < 5 || isempty(dispFlag)
-    dispFlag = 0;       % By default don't display the point clouds
+    dispFlag.matchPair = 0;     % Don't display the mated pixels in the image pair
+    dispFlag.pcPair = 0;        % Don't display the final registered pair
 end
 % Corner detection technique --
 if nargin < 6 || isempty(cornerTech)
@@ -141,16 +150,22 @@ while imgNumStruct.startIndx < imgNumStruct.endIndx
                 matchingStruct = struct('technique', cornerTech, ...
                     'points1', points2DAnch , 'points2', points2DMoved);
                 [inlierPtsAnch, inlierPtsMoved] = FindMatchedPoints(rgbImgAnch, ...
-                    rgbImgMoved, matchingStruct, geomParamsStruct, dispFlag);
+                    rgbImgMoved, matchingStruct, geomParamsStruct, dispFlag.matchPair);
                 
-                % Estimate the transformation from the two point cloud using the
-                % RGB matching points.
+                % Estimate the initial guess for transformation between the two 
+                % point cloud using the RGB matching points.
                 pcStructAnch = struct('rgbPts', inlierPtsAnch, 'pc', pcAnch, ...
                     'tformDepth2RGB', tformDepth2RGB);
                 pcStructMoved = struct('rgbPts', inlierPtsMoved, 'pc', pcMoved, ...
                     'tformDepth2RGB', tformDepth2RGB);
                 [tformMoved2Anchor, matchPtsCount, regStats] = ...
                     EstimateTformMatchingRGB(pcStructAnch, pcStructMoved);
+                
+                % Run the ICP or similar algorithms to do a final registration
+                % and then update the current transformation matrix.
+                regStruct = struct('initTform', tformMoved2Anchor, ...
+                    'icpMethod', 'pointToPlane', 'maxIter', 20);
+                tformMoved2Anchor = RunRigidReg(pcAnch, pcMoved, regStruct);
                 
                 % Check the registration status, i.e., whether it succeeded or
                 % failed and store the information into a file.
@@ -166,8 +181,9 @@ while imgNumStruct.startIndx < imgNumStruct.endIndx
                 WriteRT(tformMoved2Anchor, rtFullNameMoved);
                 
                 % If needed display the point cloud
-                if dispFlag == 1
-                    DisplayPCs(pcAnch, pcMoved, tformMoved2Anchor);
+                if dispFlag.pcPair == 1
+                    DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved,...
+                        tformMoved2Anchor);
                 end
                 break;
             else
@@ -230,10 +246,12 @@ LogInfo(logFileName, statusStr);
 end
 
 %%
-function DisplayPCs(pcAnch, pcMoved, tformMoved2Anchor)
+function DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved, tformMoved2Anchor)
 % Function to display the anchor and the transformed version of moved point
 % cloud.
 pcMoved_Tformed = TransformPointCloud(pcMoved, tformMoved2Anchor);
+figure();
 pcshowpair(pcAnch, pcMoved_Tformed);
-legend('Anchor PC', 'Transformed PC');
+legend({pcNameAnch, sprintf('Transformed %s', pcNameMoved)}, 'Interpreter', ...
+    'none');
 end
