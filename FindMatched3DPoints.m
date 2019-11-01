@@ -1,4 +1,4 @@
-function [mtch3DIndx1, mtch3DIndx2] = EstimateTformMatchingRGB(pcStruct1, pcStruct2)
+function [mtch3DIndx1, mtch3DIndx2] = FindMatched3DPoints(pcStruct1, pcStruct2)
 % In this function given the RGB points and the corresponding point clouds, I am
 % going to findout the 3D points that correspond to the RGB points.
 %
