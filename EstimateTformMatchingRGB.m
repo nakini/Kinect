@@ -1,26 +1,20 @@
-function [tformPC2toPC1, matchPtsCount, regStatus] = ...
-    EstimateTformMatchingRGB(pcStruct1, pcStruct2)
+function [mtch3DIndx1, mtch3DIndx2] = EstimateTformMatchingRGB(pcStruct1, pcStruct2)
 % In this function given the RGB points and the corresponding point clouds, I am
-% going to findout the 3D points that correspond to the RGB points. Then, using
-% the matching 3D points I am going to estimate the transformation between the 
-% point clouds.
+% going to findout the 3D points that correspond to the RGB points.
 %
 % INPUT(s):
-%   pcStruct        := Structure for each point cloud holding the following info
-%       rgbPts := Nx2 matrices holding the matching RGB image indices of each
-%           image
-%       pc := 'pointCloud' structure holding the 3D point info for each point
-%           cloud w.r.t the depth camera coordinate frame.
-%       tformDepth2RGB := Structure holding the stereo calibration parameters
-%           of both IR and RGB images and the transformation from Depth-to-RGB.
+% 1 [pcStruct1, pcStruct2]
+%   Structure for each point cloud holding the following info
+%       1) rgbPts -- Nx2 matrices holding the matching RGB image pixel indices 
+%   of each image
+%       2) pc -- 'pointCloud' structure holding the 3D point info for each point
+%   cloud w.r.t the depth camera coordinate frame.
+%       3) tformDepth2RGB -- Structure holding the stereo calibration parameters
+%   of both IR and RGB images and the transformation from Depth-to-RGB.
 %   
 % OUTPUT(s):
-%   tformPC2toPC1   := Structure having rotation R and translation T from
-%           pc2 to pc1
-%   matchPtsCount   := Number of matching points in two images.
-%   regStatus       := Status flag that will indicate whether a transformation
-%           matrix is evaluated or just set to defaul values for R and T. 0 on
-%           success and 1 on failure
+% 1 [mtch3DIndx1, mtch3DIndx2]
+%   Indices of 3D points of each point cloud that match with each other
 %
 % Example(s):
 %   pcStructAnch = struct('rgbPts', inlierPtsAnch, 'pc', pcAnch, ...
@@ -39,49 +33,30 @@ pc1InRGBFrame = TransformPointCloud(pcStruct1.pc, pcStruct1.tformDepth2RGB);
 pc2InRGBFrame = TransformPointCloud(pcStruct2.pc, pcStruct2.tformDepth2RGB);
 
 % Get the UV coordinates of those projected points on the RGB images
-rgbUVs1 = ProjectPointsOnImage(pc1InRGBFrame.Location, ...
-    pcStruct1.tformDepth2RGB.KK_RGB);
-rgbUVs1 = round(rgbUVs1);
-rgbUVs2 = ProjectPointsOnImage(pc2InRGBFrame.Location, ...
-    pcStruct2.tformDepth2RGB.KK_RGB);
-rgbUVs2 = round(rgbUVs2);
+rgbK1 = pcStruct1.tformDepth2RGB.KK_RGB;        % Intrinsic parameters
+estimatedUVs1 = ProjectPointsOnImage(pc1InRGBFrame.Location, rgbK1);
+estimatedUVs1 = round(estimatedUVs1);
+rgbK2 = pcStruct2.tformDepth2RGB.KK_RGB;        % Intrinsic
+estimatedUVs2 = ProjectPointsOnImage(pc2InRGBFrame.Location, rgbK2);
+estimatedUVs2 = round(estimatedUVs2);
 
-% Search for indices of the points given by the user in the point set created in
-% the previous set.
-numPts = length(pcStruct1.rgbPts);
-pcMatch1 = zeros(numPts, 3);
-pcMatch2 = zeros(numPts, 3);
-pcRowNum = 1;                   % Counter to keep track of valid points
-for i = 1:numPts
-    % Find the indices of matched points
-    tmp1 = round(pcStruct1.rgbPts.Location(i, :));
-    [r1, c1] = find(ismember(rgbUVs1, tmp1, 'rows'));
-    tmp2 = round(pcStruct2.rgbPts.Location(i, :));
-    [r2, c2] = find(ismember(rgbUVs2, tmp2, 'rows'));
-    
-    % Check whether both of the row numbers are non empty sets
-    if (~isempty(r1) && ~isempty(r2))
-        pcMatch1(pcRowNum, :) = pcStruct1.pc.Location(r1(1), :);
-        pcMatch2(pcRowNum, :) = pcStruct2.pc.Location(r2(1), :);
-        pcRowNum = pcRowNum + 1;
-    end
-end
-pcRowNum = pcRowNum - 1;
+% For each given UV point in the RGB frame, find the index of nearest estimated 
+% UV point using some distance threshold with range search. Here, we consider
+% the pixels that with in 2 pixel distance.
+givenUVs1 = pcStruct1.rgbPts.Location;
+givenUVs2 = pcStruct2.rgbPts.Location;
+[mtchIndx1, mtchDist1] = knnsearch(estimatedUVs1, givenUVs1);  % 1st nearest neighbor
+[mtchIndx2, mtchDist2] = knnsearch(estimatedUVs2, givenUVs2);
 
-% Now, estimate the rotation and translation between two point clouds - At least
-% we need 3 non-linear points to estimate the rotation matrix. So, I choose 5
-% instead of 3 to make sure that all of them don't lie on the same plane.
-if pcRowNum > 5
-    pcMatch1 = pcMatch1(1:pcRowNum, :);
-    pcMatch2 = pcMatch2(1:pcRowNum, :);
-    [R, T] = EstimateRT(pcMatch2', pcMatch1');     % The function needs 3xN matrices
-    regStatus = 0;
-else
-    R = eye(3);
-    T = ones(3,1);
-    regStatus = 1;
-end
+% Prune all the indices which are greater than the threshold distances. Set 0 to
+% all indices which are beyond the threshld.
+mtchIndx1(mtchDist1 > 2) = 0;
+mtchIndx2(mtchDist2 > 2) = 0;
 
-% Bundle up for returning the values
-matchPtsCount = pcRowNum;
-tformPC2toPC1 = struct('R', R, 'T', T);
+% Only save those indices of the pair of point clouds where we find a match in
+% both the point clouds
+commIndx = mtchIndx1 & mtchIndx2;
+
+% Return the matched point indices
+mtch3DIndx1 = mtchIndx1(commIndx);
+mtch3DIndx2 = mtchIndx2(commIndx);
