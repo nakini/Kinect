@@ -46,6 +46,12 @@ function matchPtsCount = EstimateTform_Batch(dirStruct, imgNumStruct, varargin)
 % 6 ['cornerTech', cornerTech]
 %   Either automatic (SURF|Harris) or manual (UserDefined)
 %
+% 7 ['regRigidStruct', regRigidParams]
+%   Parameters need for carrying out a rigid registration method on two given
+%   point cloud.
+%       1) maxIter      -- Maximum number of iteration
+%       2) icpMethod    -- This could be pointToPlane | pointToPoint | ndt3D
+%
 % OUTPUT(s):
 % 1 [matchPtsCount]
 %   Count of number of matched points of each image with the previous one. The
@@ -55,11 +61,7 @@ function matchPtsCount = EstimateTform_Batch(dirStruct, imgNumStruct, varargin)
 %   dirStruct = struct('dirName', '~/Dropbox/PhD/Data/Data/Alvaro/2017_0825/103/
 %       SampleImages/', 'plyFolderName', 'PCinPLY_woPlane_Testing', 
 %       'rtFolderName', 'PCinXYZNorTri_woPlane_Testing');
-%   imgNumStruct = struct('startIndx', 1250, 'endIndx',1260);
-%   geomParamsStruct = struct('tformType', 'projective', 'maxDist', 3.5);
-%   dispFlag = struct('pcPair', false, 'matchPair', false)
-%   mtchPts = EstimateTform_Batch(dirStruct, imgNumStruct, 'geomParamsStruct', ...
-%       geomParamsStruct,'dispFlag', dispFlag, 'cornerTech', 'userdefined');
+%   mtchPts = EstimateTform_Batch(dirStruct, imgNumStruct);
 
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
@@ -79,6 +81,8 @@ defaultFlags = struct('matchPair', false, 'pcPair', false);
 validCornerOptions = {'SURF', 'Harris', 'UserDefined'};
 defaultCorner = 'SURF';
 validateCorner = @(x) any(validatestring(x, validCornerOptions));
+% Regid registration parameters
+defaultRegRigidParams =  struct('maxIter', 20, 'icpMethod', 'pointToPlane');
 
 addRequired(p, 'dirStruct', @validateDirStruct);
 addRequired(p, 'imgNumStruct', @validateImgNumStruct);
@@ -86,6 +90,7 @@ addParameter(p, 'geomParamsStruct', defaultGeomParams, @validateGeomParams);
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 addParameter(p, 'dispFlag', defaultFlags, @validateDispFlag);
 addParameter(p, 'cornerTech', defaultCorner, validateCorner);
+addParameter(p, 'regrigidStruct', defaultRegRigidParams, @validateRegRigidParams);
 
 p.parse(dirStruct, imgNumStruct, varargin{:});
 disp(p.Results);
@@ -98,19 +103,23 @@ geomParamsStruct = p.Results.geomParamsStruct;
 calibStereo = p.Results.calibStereo;
 dispFlag = p.Results.dispFlag;
 cornerTech = p.Results.cornerTech;
+regrigidStruct = p.Results.regrigidStruct;
 
 % Algorithm -------------------------------------------------------------------
-% Create a list of files
+% First I am going to go through all the files in the given range and create a
+% list.
 fileList = [];                  % Store a list of image files with complete path
 fileNumbers = [];               % Store the numbers given to the images
 imgIndx = 1;                    % Counter
+% Create a list of files
+% ======================
 while imgNumStruct.startIndx < imgNumStruct.endIndx
-    iNum = imgNumStruct.startIndx;
-    rgbName = ['rgbImg_', num2str(iNum), '.jpg'];
+    imgNum = imgNumStruct.startIndx;
+    rgbName = ['rgbImg_', num2str(imgNum), '.jpg'];
     rgbFullName = [dirStruct.dirName, '/', rgbName];
     if exist(rgbFullName, 'file') == 2
         fileList{imgIndx} = rgbFullName;
-        fileNumbers(imgIndx) = iNum;
+        fileNumbers(imgIndx) = imgNum;
         imgIndx = imgIndx + 1;
     end
     imgNumStruct.startIndx = imgNumStruct.startIndx + 1;   % Check the next one
@@ -128,11 +137,20 @@ end
 % read the calibration parameters and create a structure to holding 
 % transformation matrix, etc...
 tformDepth2RGB = TformMatFromCalibration(calibStereo);
-    
+
+% File name that is going to store all the log information.
+logFileName = [dirName, '/', rtFolderName, '/Log-', date, '.txt'];
+logString = string(['Processings started at: ', datestr(datetime), '\n']);
+LogInfo(logFileName, logString);
+% Iterate through the list
+% ========================
 % Load a pair of images at a time and find the correspondence. The first image
 % will be the anchor image and the 2nd will be the moved point cloud
 for iNum = 1:numImgs-1
-    % Read the 1st RGB image and the corresponding rt*.txt file
+    % Read the 1st RGB image & PC
+    % ===========================
+    % Here, we are also going to read corresponding rt*.txt file if exists. If
+    % not we are going to crate one.
     anchNum = fileNumbers(iNum);
     rgbFullNameAnch = fileList{iNum};
     rgbImgAnch = imread(rgbFullNameAnch);   % Read 1st image
@@ -149,11 +167,12 @@ for iNum = 1:numImgs-1
         WriteRT(struct('R', eye(3,3), 'T', zeros(3,1)), rtFullNameAnch);
     end
 
-    % Read the 2nd RGB image and its rt*.txt file
+    % Read the 2nd RGB image & PC
+    % ===========================
     movedIndx = iNum + 1;
     movedNum = fileNumbers(movedIndx);
     % Read the 2nd point cloud
-    rgbNameFullMoved = fileList{iNum+1};
+    rgbNameFullMoved = fileList{movedIndx};
     rgbImgMoved = imread(rgbNameFullMoved); % Read 2nd image
     pcNameMoved = ['depthImg_', num2str(movedNum), '.ply'];
     pcFullNameMoved = [dirName, '/', plyFolderName, '/', pcNameMoved];
@@ -164,9 +183,10 @@ for iNum = 1:numImgs-1
     rgbNameMoved = ['rgbImg_', num2str(movedNum), '.jpg'];
     fprintf('Matching -- %s and %s\n\n', rgbNameAnch, rgbNameMoved);
     
-    % Prepare data for matching two RGB images -- Detect corners either 
-    % automatically (SURF | Harris) or provide them by projecting the point 
-    % clouds onto the RGB images.
+    % Match two RGB images
+    % ====================
+    % Detect corners either  automatically (SURF | Harris) or provide them by 
+    % projecting the point clouds onto the RGB images.
     if strcmpi(cornerTech, 'SURF') || strcmpi(cornerTech, 'Harris')
         % This method uses the automatic corner detection technique, so we don't
         % have to find out the 2D point.
@@ -185,41 +205,50 @@ for iNum = 1:numImgs-1
     % Find the matching point between two images.
     matchingStruct = struct('technique', cornerTech, 'points1', points2DAnch , ...
         'points2', points2DMoved);
-    [inlierPtsAnch, inlierPtsMoved] = FindMatchedPoints(rgbImgAnch, ...
+    [inlierPtsAnch, inlierPtsMoved] = FindMatched2DPixels(rgbImgAnch, ...
         rgbImgMoved, matchingStruct, geomParamsStruct, dispFlag.matchPair);
     
+    % Match corresponding Point Clouds
+    % ================================
     % Estimate the initial guess for transformation between the two point cloud
     % using the RGB matching points.
     pcStructAnch = struct('rgbPts', inlierPtsAnch, 'pc', pcAnch, ...
         'tformDepth2RGB', tformDepth2RGB);
     pcStructMoved = struct('rgbPts', inlierPtsMoved, 'pc', pcMoved, ...
         'tformDepth2RGB', tformDepth2RGB);
-    [tformMoved2Anchor, matchPtsCount(movedIndx), regStats] = ...
-        EstimateTformMatchingRGB(pcStructAnch, pcStructMoved);
+    [mtch3DIndxAnch, mtch3DIndxMoved] = FindMatched3DPoints(pcStructAnch, ...
+        pcStructMoved);
+    matchPtsCount(movedIndx) = size(mtch3DIndxAnch, 1);
     
-    % Run the ICP or similar algorithms to do a final registration and then
-    % update the current transformation matrix.
-    regStruct = struct('initTform', tformMoved2Anchor, 'maxIter', 20, ...
-        'icpMethod', 'pointToPlane');
-    tformMoved2Anchor = RunRigidReg(pcAnch, pcMoved, regStruct);
+    % Find the transformation
+    % =======================
+    % Using the matching 3D point pairs find the coarse transformation between
+    % the two point clouds and if needed do a fine registration using standard
+    % registration techniques.
+    pcStructAnch = struct('pc', pcAnch, 'matchIndx', mtch3DIndxAnch);
+    pcStructMoved = struct('pc', pcMoved, 'matchIndx', mtch3DIndxMoved);
+    [tformMoved2Anchor, regStats] = FindTransformationPC2toPC1(pcStructAnch, ...
+        pcStructMoved, regrigidStruct);
     
-    % Check the registration status, i.e., whether it succeeded or failed and
-    % store the information into a file.
-    logFileName = [dirName, '/', rtFolderName, '/Log-', date, '.txt'];
+    % Log, Save and Display
+    % =====================
     LogRegistrationStatus(regStats, pcNameAnch, pcNameMoved, ...
         matchPtsCount(movedIndx), logFileName);
-    
     % Save the transformation matrix into a file
     rtNameMoved = ['rt_', num2str(movedNum), '.txt'];
     rtFullNameMoved = [dirName, '/', rtFolderName, '/', rtNameMoved];
     WriteRT(tformMoved2Anchor, rtFullNameMoved);
-    
     % If needed display the point cloud
     if dispFlag.pcPair == 1
         DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved,...
             tformMoved2Anchor);
     end
 end
+
+% Store the total number of files processed status
+logString = string(['\nTotal number of files processed: ', num2str(movedIndx),...
+    '\n\n']);
+LogInfo(logFileName, logString);
 end
 
 %%
@@ -252,11 +281,45 @@ tformDepth2RGB.KK_IR = KK_right;
 end
 
 %%
+function [tformPC2toPC1, regStatus] = FindTransformationPC2toPC1(pcStruct1, ...
+    pcStruct2, paramsRegRigid)
+% Here, we are going to find transformation from the matched 3D point pairs. For
+% which, we need at least 3 points. However, to be on safe side, I have used the
+% minimum matched point pair count as 5.
+numMatchPts = size(pcStruct1.matchIndx, 1);
+if numMatchPts < 5
+    R = eye(3);
+    T = ones(3,1);
+    tformPC2toPC1 = struct('R', R, 'T', T);
+    regStatus = false;
+    return
+end
+
+% Carse Registration
+% ==================
+% Otherwise, first find the coarse transformation and then update the same
+% carrying out the fine registration.
+pcMatch1 = pcStruct1.pc.Location(pcStruct1.matchIndx, :);
+pcMatch2 = pcStruct2.pc.Location(pcStruct2.matchIndx, :);
+[R, T] = EstimateRT(pcMatch2', pcMatch1');                      % Coarse reg
+regStatus = true;
+tformPC2toPC1 = struct('R', R, 'T', T);
+
+% Fine Registration
+% =================
+% Run the ICP or similar algorithms to do a final registration and then update 
+% the current transformation matrix. Update the initial transformation field
+% with the current findings and run the rigid ICP.
+paramsRegRigid.initTform = tformPC2toPC1;
+tformPC2toPC1 = RunRigidReg(pcStruct1.pc, pcStruct2.pc, paramsRegRigid);
+end
+
+%%
 function LogRegistrationStatus(regStats, pcNameAnch, pcNameMoved, ...
     matchPtsCount, logFileName)
 % Function to save the registration status into a file and also display the
 % same.
-if regStats ~= 0
+if ~regStats
     statusStr = string(['FAILED to register ', pcNameAnch, ' and ', ...
         pcNameMoved, '. Number of matching points -- "', ...
         num2str(matchPtsCount), '"\n']);
@@ -347,13 +410,29 @@ end
 
 function TF = validateDispFlag(dispFlag)
 TF = false;
-% First validate whether the structure contains the required fields or not.
 if ~all(isfield(dispFlag, {'pcPair', 'matchPair'}))
+    % First validate whether the structure contains the required fields or not.
     error('Provide the fields -- pcPair, matchPair');
 elseif ~islogical(dispFlag.pcPair) || ~islogical(dispFlag.matchPair)
     % Then check whether the given fields are consistent with the data type that
     % is required.
     error('The datatypes for the fields should be -- true/false');
+else
+    TF = true;
+end
+end
+
+function TF = validateRegRigidParams(regRigidParams)
+if ~all(isfield(regRigidParams, {'maxIter', 'icpMethod'}))
+    % First validate whether the structure contains the required fields or not.
+    error('Provide the fields -- pcPair, matchPair');
+elseif ~isnumeric(regRigidParams.maxIter) || (regRigidParams.maxIter < 0)
+    % Maximum iteration count check
+    error('The maximum iteration count should be a non-negative integer');
+elseif ~any(validatestring(regRigidParams.icpMethod , ...
+        {'pointToPoint', 'pointToPlane', 'ndt3D'}))
+    % Registration method name check
+    error('The registration method should be --- pointToPoint|pointToPlane|ndt3D');
 else
     TF = true;
 end
