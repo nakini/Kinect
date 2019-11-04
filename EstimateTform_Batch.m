@@ -1,4 +1,5 @@
-function matchPtsCount = EstimateTform_Batch(dirStruct, imgNumStruct, varargin)
+function [matchPtsCount, regRigidError] = EstimateTform_Batch(dirStruct, ...
+    imgNumStruct, varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
 % matched pixels I will figure out the corresponding 3D points for each RGB
@@ -56,6 +57,9 @@ function matchPtsCount = EstimateTform_Batch(dirStruct, imgNumStruct, varargin)
 % 1 [matchPtsCount]
 %   Count of number of matched points of each image with the previous one. The
 %   count for the 1st image will be 0.
+%
+% 2 [regRigidError]
+%   Registration error from ICP algorithm
 %
 % Example:
 %   dirStruct = struct('dirName', '~/Dropbox/PhD/Data/Data/Alvaro/2017_0825/103/
@@ -126,7 +130,8 @@ while imgNumStruct.startIndx < imgNumStruct.endIndx
 end
 
 numImgs = length(fileList);         % Total number of images
-matchPtsCount = zeros(numImgs, 1);  % To store mating points
+matchPtsCount = zeros(numImgs, 2);  % Store matching points
+regRigidError = zeros(numImgs, 2);  % Hold the error from ICP algorithm
 % If there is only 1 image then then there is no point in finding the matches.
 if numImgs < 2
     disp('Only few images found, so operation aborted');
@@ -218,7 +223,8 @@ for iNum = 1:numImgs-1
         'tformDepth2RGB', tformDepth2RGB);
     [mtch3DIndxAnch, mtch3DIndxMoved] = FindMatched3DPoints(pcStructAnch, ...
         pcStructMoved);
-    matchPtsCount(movedIndx) = size(mtch3DIndxAnch, 1);
+    matchPtsCount(movedIndx, 1) = movedNum;
+    matchPtsCount(movedIndx, 2) = size(mtch3DIndxAnch, 1);
     
     % Find the transformation
     % =======================
@@ -227,13 +233,15 @@ for iNum = 1:numImgs-1
     % registration techniques.
     pcStructAnch = struct('pc', pcAnch, 'matchIndx', mtch3DIndxAnch);
     pcStructMoved = struct('pc', pcMoved, 'matchIndx', mtch3DIndxMoved);
-    [tformMoved2Anchor, regStats] = FindTransformationPC2toPC1(pcStructAnch, ...
+    [tformMoved2Anchor, rmse, regStats] = FindTransformationPC2toPC1(pcStructAnch, ...
         pcStructMoved, regrigidStruct);
+    regRigidError(movedIndx, 1) = movedNum;
+    regRigidError(movedIndx, 2) = rmse;
     
     % Log, Save and Display
     % =====================
     LogRegistrationStatus(regStats, pcNameAnch, pcNameMoved, ...
-        matchPtsCount(movedIndx), logFileName);
+        matchPtsCount(movedIndx, 2), logFileName);
     % Save the transformation matrix into a file
     rtNameMoved = ['rt_', num2str(movedNum), '.txt'];
     rtFullNameMoved = [dirName, '/', rtFolderName, '/', rtNameMoved];
@@ -281,7 +289,7 @@ tformDepth2RGB.KK_IR = KK_right;
 end
 
 %%
-function [tformPC2toPC1, regStatus] = FindTransformationPC2toPC1(pcStruct1, ...
+function [tformPC2toPC1, rmse, regStatus] = FindTransformationPC2toPC1(pcStruct1, ...
     pcStruct2, paramsRegRigid)
 % Here, we are going to find transformation from the matched 3D point pairs. For
 % which, we need at least 3 points. However, to be on safe side, I have used the
@@ -291,6 +299,7 @@ if numMatchPts < 5
     R = eye(3);
     T = ones(3,1);
     tformPC2toPC1 = struct('R', R, 'T', T);
+    rmse = inf;             % No registration, so error is infinite
     regStatus = false;
     return
 end
@@ -311,7 +320,7 @@ tformPC2toPC1 = struct('R', R, 'T', T);
 % the current transformation matrix. Update the initial transformation field
 % with the current findings and run the rigid ICP.
 paramsRegRigid.initTform = tformPC2toPC1;
-tformPC2toPC1 = RunRigidReg(pcStruct1.pc, pcStruct2.pc, paramsRegRigid);
+[tformPC2toPC1, ~, rmse] = RunRigidReg(pcStruct1.pc, pcStruct2.pc, paramsRegRigid);
 end
 
 %%
