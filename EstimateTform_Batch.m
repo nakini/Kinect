@@ -1,5 +1,4 @@
-function [matchPtsCount, regRigidError] = EstimateTform_Batch(dirStruct, ...
-    imgNumStruct, varargin)
+function matchInfo = EstimateTform_Batch(dirStruct, imgNumStruct, varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
 % matched pixels I will figure out the corresponding 3D points for each RGB
@@ -130,8 +129,11 @@ while imgNumStruct.startIndx < imgNumStruct.endIndx
 end
 
 numImgs = length(fileList);         % Total number of images
-matchPtsCount = zeros(numImgs, 2);  % Store matching points
-regRigidError = zeros(numImgs, 2);  % Hold the error from ICP algorithm
+matchPtsCount = zeros(numImgs, 1);  % Store matching points
+regRigidError = zeros(numImgs, 1);  % Hold the error from ICP algorithm
+imgName = cell(numImgs, 1);         % Name of each image
+imgName{1,1} = ['rgbImg_', num2str(fileNumbers(1)), '.jpg'];    % 1st image name
+
 % If there is only 1 image then then there is no point in finding the matches.
 if numImgs < 2
     disp('Only few images found, so operation aborted');
@@ -186,6 +188,7 @@ for iNum = 1:numImgs-1
     % Display the image names that were supposed to be matched
     rgbNameAnch = ['rgbImg_', num2str(anchNum), '.jpg'];
     rgbNameMoved = ['rgbImg_', num2str(movedNum), '.jpg'];
+    imgName{movedIndx, 1} = rgbNameMoved;
     fprintf('Matching -- %s and %s\n\n', rgbNameAnch, rgbNameMoved);
     
     % Match two RGB images
@@ -223,8 +226,7 @@ for iNum = 1:numImgs-1
         'tformDepth2RGB', tformDepth2RGB);
     [mtch3DIndxAnch, mtch3DIndxMoved] = FindMatched3DPoints(pcStructAnch, ...
         pcStructMoved);
-    matchPtsCount(movedIndx, 1) = movedNum;
-    matchPtsCount(movedIndx, 2) = size(mtch3DIndxAnch, 1);
+    matchPtsCount(movedIndx, 1) = size(mtch3DIndxAnch, 1);
     
     % Find the transformation
     % =======================
@@ -235,13 +237,12 @@ for iNum = 1:numImgs-1
     pcStructMoved = struct('pc', pcMoved, 'matchIndx', mtch3DIndxMoved);
     [tformMoved2Anchor, rmse, regStats] = FindTransformationPC2toPC1(pcStructAnch, ...
         pcStructMoved, regrigidStruct);
-    regRigidError(movedIndx, 1) = movedNum;
-    regRigidError(movedIndx, 2) = rmse;
+    regRigidError(movedIndx, 1) = rmse;
     
     % Log, Save and Display
     % =====================
     LogRegistrationStatus(regStats, pcNameAnch, pcNameMoved, ...
-        matchPtsCount(movedIndx, 2), logFileName);
+        matchPtsCount(movedIndx, 1), logFileName);
     % Save the transformation matrix into a file
     rtNameMoved = ['rt_', num2str(movedNum), '.txt'];
     rtFullNameMoved = [dirName, '/', rtFolderName, '/', rtNameMoved];
@@ -257,6 +258,10 @@ end
 logString = string(['\nTotal number of files processed: ', num2str(movedIndx),...
     '\n\n']);
 LogInfo(logFileName, logString);
+
+% Create a table out of "matched point count" and "rmse" along with names
+matchInfo = table(imgName, matchPtsCount, regRigidError, ...
+     'VariableNames', {'Name', 'Matched_Points', 'ICP_RMSE'});
 end
 
 %%
