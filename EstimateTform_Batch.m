@@ -72,7 +72,7 @@ function [matchPtsCount, regRigidError] = EstimateTform_Batch(dirStruct, ...
 
 % Validate input arguments ----------------------------------------------------
 p = inputParser;
-p.StructExpand = false;             % Accept strutcture as one element
+p.StructExpand = false;             % Accept structure as one element
 
 % Parameters to be used to match 2 RGB images
 defaultGeomParams = struct('tformType', 'projective', 'maxDist', 3.5);
@@ -262,11 +262,11 @@ end
 %%
 function points2D = ProjectPCs2RGBImage(pc, tformDepth2RGB)
 % Project the 3D points onto their corresponding RGB images using the intrinsic 
-% and extrinsic matrix of the Kinect IR and RGB camera
-pcInRGBFrame = TransformPointCloud(pc, tformDepth2RGB);
+% and extrinsic matrix of the Kinect IR and RGB camera. We are just assuming
+% that the given point cloud is already in the RGB frame.
 
 % Get the UV values of those projected points on the RGB images
-rgbUVs = ProjectPointsOnImage(pcInRGBFrame.Location, tformDepth2RGB.KK_RGB);
+rgbUVs = ProjectPointsOnImage(pc.Location, tformDepth2RGB.KK_RGB);
 rgbUVs = round(rgbUVs);
 
 % Create the point cloud object so that it could be used in feature extraction
@@ -282,8 +282,8 @@ load(calibStereo, 'R', 'T', 'KK_left', 'KK_right');
 % Create as structure that will hold R matrix & T vector and
 % the intrinsic parameters of each camera.
 tformDepth2RGB.R = inv(R);
-% Convert into Meters as the PC is in Meters
-tformDepth2RGB.T = -inv(R)*T/1000;
+% Convert into Centimeters as the PC is into Centimeters
+tformDepth2RGB.T = -inv(R)*T/10;
 tformDepth2RGB.KK_RGB = KK_left;
 tformDepth2RGB.KK_IR = KK_right;
 end
@@ -304,8 +304,8 @@ if numMatchPts < 5
     return
 end
 
-% Carse Registration
-% ==================
+% Coarse Registration
+% ===================
 % Otherwise, first find the coarse transformation and then update the same
 % carrying out the fine registration.
 pcMatch1 = pcStruct1.pc.Location(pcStruct1.matchIndx, :);
@@ -362,12 +362,12 @@ elseif ~ischar(dirStruct.dirName) && ~ischar(dirStruct.plyFolderName) && ...
         ~ischar(dirStruct.rtFolderName)
     % Then check whether the given fields are consistent with the data type that
     % is required.
-    error(['The fields of the structure should be strings conaining the'...
+    error(['The fields of the structure should be strings containing the'...
         ' name of the folders']);
 elseif ~(exist(dirStruct.dirName, 'dir')==7) || ...
         ~(exist([dirStruct.dirName, '/', dirStruct.plyFolderName], 'dir') == 7)
     % Throw an error showing telling about the missing directory
-    error('The directory does not exist. Check the path onec again.');
+    error('The directory does not exist. Check the path once again.');
 else
     TF = true;
 end
@@ -425,7 +425,7 @@ if ~all(isfield(dispFlag, {'pcPair', 'matchPair'}))
 elseif ~islogical(dispFlag.pcPair) || ~islogical(dispFlag.matchPair)
     % Then check whether the given fields are consistent with the data type that
     % is required.
-    error('The datatypes for the fields should be -- true/false');
+    error('The data types for the fields should be -- true/false');
 else
     TF = true;
 end

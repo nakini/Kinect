@@ -114,8 +114,8 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
             load(calibStereo, 'R', 'T', 'KK_left', 'KK_right');
             % Create as strucutre that will hold R matrix and T vector only.
             tformDepth2RGB.R = inv(R);
-            % Convert into Meters as the PC is in Meters
-            tformDepth2RGB.T = -inv(R)*T/1000;
+            % Convert into Centimeters as the PC is in centimeters
+            tformDepth2RGB.T = -inv(R)*T/10;
             tformDepth2RGB.KK_RGB = KK_left;
             tformDepth2RGB.KK_IR = KK_right;
             

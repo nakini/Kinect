@@ -8,7 +8,7 @@ function [mtch3DIndx1, mtch3DIndx2] = FindMatched3DPoints(pcStruct1, pcStruct2)
 %       1) rgbPts -- Nx2 matrices holding the matching RGB image pixel indices 
 %   of each image
 %       2) pc -- 'pointCloud' structure holding the 3D point info for each point
-%   cloud w.r.t the depth camera coordinate frame.
+%   cloud w.r.t the RGB camera coordinate frame.
 %       3) tformDepth2RGB -- Structure holding the stereo calibration parameters
 %   of both IR and RGB images and the transformation from Depth-to-RGB.
 %   
@@ -27,17 +27,12 @@ function [mtch3DIndx1, mtch3DIndx2] = FindMatched3DPoints(pcStruct1, pcStruct2)
 %------------------------------------------------------------------------------
 %------------------------------- START ----------------------------------------
 
-% Project the points into the color frame from the depth frame using the 
-% extrinsic parameters.
-pc1InRGBFrame = TransformPointCloud(pcStruct1.pc, pcStruct1.tformDepth2RGB);
-pc2InRGBFrame = TransformPointCloud(pcStruct2.pc, pcStruct2.tformDepth2RGB);
-
 % Get the UV coordinates of those projected points on the RGB images
 rgbK1 = pcStruct1.tformDepth2RGB.KK_RGB;        % Intrinsic parameters
-estimatedUVs1 = ProjectPointsOnImage(pc1InRGBFrame.Location, rgbK1);
+estimatedUVs1 = ProjectPointsOnImage(pcStruct1.pc.Location, rgbK1);
 estimatedUVs1 = round(estimatedUVs1);
 rgbK2 = pcStruct2.tformDepth2RGB.KK_RGB;        % Intrinsic
-estimatedUVs2 = ProjectPointsOnImage(pc2InRGBFrame.Location, rgbK2);
+estimatedUVs2 = ProjectPointsOnImage(pcStruct2.pc.Location, rgbK2);
 estimatedUVs2 = round(estimatedUVs2);
 
 % For each given UV point in the RGB frame, find the index of nearest estimated 
