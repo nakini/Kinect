@@ -1,4 +1,5 @@
-function matchInfo = EstimateTform_Batch(dirStruct, imgNumStruct, varargin)
+function [matchInfo, matchPtsPxls] = EstimateTform_Batch(dirStruct, ...
+    imgNumStruct, varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
 % matched pixels I will figure out the corresponding 3D points for each RGB
@@ -10,57 +11,56 @@ function matchInfo = EstimateTform_Batch(dirStruct, imgNumStruct, varargin)
 % or 2) Project the 3D points onto the RGB image and use them as the feature
 % points.
 %
-% INPUT(s):
-% 1 [dirStruct]
-%   Directory structure containing the RGB/Depth images and the corresponding
-%   'ply' files and the 'rt' files.
-%       1) dirName      -- Name of the folder containing the depth and RGB images
-%       2) plyFolderName-- Name of the folder relative to 'dirName' containing
-%   the ply files.
-%       3) rtFolderName -- Name of the folder relative to 'dirName' holding all
-%	the text files which contain the R|T information.
+% INPUT(s)
+% ========
+% 1. dirStruct: Directory structure containing the RGB/Depth images and the
+% corresponding 'ply' files and the 'rt' files.
+%   1) dirName -- Name of the folder containing the depth and RGB images
+%   2) plyFolderName -- Name of the folder relative to 'dirName' containing the
+%   ply files.
+%	3) rtFolderName -- Name of the folder relative to 'dirName' holding all the
+%	text files which contain the R|T information.
 %
-% 2 [imgNumStruct]
-%   Structure holding the stand and end number of a sequence of images which
-%   need to be processed
-%       1) startIndx    -- File number of 1st pc
-%       2) endIndx      -- Last file number
+% 2. imgNumStruct: Structure holding the stand and end number of a sequence of 
+% images which need to be processed
+%	1) startIndx -- File number of 1st pc
+%   2) endIndx -- Last file number
 %
-% 3 ['geomParamsStruct', geomParamsStruct]
-%   Parameters for matching the two images and removing outlier in pair of
-%   matching points. (For more information, look at the
-%   'estimateGeometricTransform()' help document.
-%       1) tformType    -- It could be similarity|affine|projective
-%       2) maxDist      -- Maximum distance from point to projection
+% 3. ['geomParamsStruct', geomParamsStruct]: Parameters for matching the two 
+% images and removing outlier in pair of matching points. (For more information,
+% look at the 'estimateGeometricTransform()' help document.
+%   1) tformType -- It could be similarity|affine|projective
+%   2) maxDist -- Maximum distance from point to projection
 %
-% 4 ['calibStereo', calibStereo]
-%   Mat-file holding stereo calibration parameters between IR and RGB of the
-%   Kinect that was used to collect the data.
+% 4. ['calibStereo', calibStereo]: Mat-file holding stereo calibration parameters 
+% between IR and RGB of the Kinect that was used to collect the data.
 %
-% 5 ['dispFlag', dispFlag]
-%   Flag to display or not the matched pixels in the image pair and the final
-%   transformed point cloud pair
-%       1) pcPair       -- [0]/1 to display the final registered point clouds
-%       2) matchPair    -- [0]/1 to display matched pair of pixels
+% 5. ['dispFlag', dispFlag]: Flag to display or not the matched pixels in the 
+% image pair and the final transformed point cloud pair
+%	1) pcPair -- [0]/1 to display the final registered point clouds
+%   2) matchPair -- [0]/1 to display matched pair of pixels
 %
-% 6 ['cornerTech', cornerTech]
-%   Either automatic (SURF|Harris) or manual (UserDefined)
+% 6. ['cornerTech', cornerTech]: Either automatic (SURF|Harris) or manual 
+% (UserDefined)
 %
-% 7 ['regRigidStruct', regRigidParams]
-%   Parameters need for carrying out a rigid registration method on two given
-%   point cloud.
-%       1) maxIter      -- Maximum number of iteration
-%       2) icpMethod    -- This could be pointToPlane | pointToPoint | ndt3D
+% 7. ['regRigidStruct', regRigidParams]: Parameters need for carrying out a 
+% rigid registration method on two given point cloud.
+%	1) maxIter -- Maximum number of iteration
+%   2) icpMethod -- This could be pointToPlane | pointToPoint | ndt3D
 %
-% OUTPUT(s):
-% 1 [matchPtsCount]
-%   Count of number of matched points of each image with the previous one. The
-%   count for the 1st image will be 0.
+% OUTPUT(s)
+% =========
+% 1. matchInfo: Mx3 table storing RGB image names, number of matched points of 
+% each image with the previous one and the "rmse" value from rigid registration.
+% The count and rmse for the 1st image will be 0 and 0, respectively.
 %
-% 2 [regRigidError]
-%   Registration error from ICP algorithm
+% 2. matchPtsPxls: Mx2 Cell storing a pair of structures. Each structure in the
+% pair, holds the following fields.
+%   1) indxPC -- Px1 vector of indices of matched 3D points of point cloud
+%   2) pixelsRGB -- Px2 matrix of 2D pixels of matched RGB image
 %
-% Example:
+% Example(s)
+% ==========
 %   dirStruct = struct('dirName', '~/Dropbox/PhD/Data/Data/Alvaro/2017_0825/103/
 %       SampleImages/', 'plyFolderName', 'PCinPLY_woPlane_Testing', 
 %       'rtFolderName', 'PCinXYZNorTri_woPlane_Testing');
@@ -98,7 +98,7 @@ addParameter(p, 'regrigidStruct', defaultRegRigidParams, @validateRegRigidParams
 p.parse(dirStruct, imgNumStruct, varargin{:});
 disp(p.Results);
 
-% Store variales into local variables to save typing :-p
+% Store variables into local variables to save typing :-p
 dirName = dirStruct.dirName;
 rtFolderName = dirStruct.rtFolderName;
 plyFolderName = dirStruct.plyFolderName;
@@ -133,6 +133,7 @@ matchPtsCount = zeros(numImgs, 1);  % Store matching points
 regRigidError = zeros(numImgs, 1);  % Hold the error from ICP algorithm
 imgName = cell(numImgs, 1);         % Name of each image
 imgName{1,1} = ['rgbImg_', num2str(fileNumbers(1)), '.jpg'];    % 1st image name
+matchPtsPxls = cell(numImgs, 2);    % Holds pair of structures
 
 % If there is only 1 image then then there is no point in finding the matches.
 if numImgs < 2
@@ -224,17 +225,18 @@ for iNum = 1:numImgs-1
         'tformDepth2RGB', tformDepth2RGB);
     pcStructMoved = struct('rgbPts', inlierPtsMoved, 'pc', pcMoved, ...
         'tformDepth2RGB', tformDepth2RGB);
-    [mtch3DIndxAnch, mtch3DIndxMoved] = FindMatched3DPoints(pcStructAnch, ...
+    [mtchAnchStct, mtchMovedStct] = FindMatched3DPoints(pcStructAnch, ...
         pcStructMoved);
-    matchPtsCount(movedIndx, 1) = size(mtch3DIndxAnch, 1);
+    matchPtsCount(movedIndx, 1) = size(mtchAnchStct.indxPC, 1);
+    matchPtsPxls(movedIndx, :) = {mtchAnchStct, mtchMovedStct};
     
     % Find the transformation
     % =======================
     % Using the matching 3D point pairs find the coarse transformation between
     % the two point clouds and if needed do a fine registration using standard
     % registration techniques.
-    pcStructAnch = struct('pc', pcAnch, 'matchIndx', mtch3DIndxAnch);
-    pcStructMoved = struct('pc', pcMoved, 'matchIndx', mtch3DIndxMoved);
+    pcStructAnch = struct('pc', pcAnch, 'matchIndx', mtchAnchStct.indxPC);
+    pcStructMoved = struct('pc', pcMoved, 'matchIndx', mtchMovedStct.indxPC);
     [tformMoved2Anchor, rmse, regStats] = FindTransformationPC2toPC1(pcStructAnch, ...
         pcStructMoved, regrigidStruct);
     regRigidError(movedIndx, 1) = rmse;
@@ -357,7 +359,7 @@ legend({pcNameAnch, sprintf('Transformed %s', pcNameMoved)}, 'Interpreter', ...
     'none');
 end
 
-%% Input arguments valiating functions
+%% Input arguments validating functions
 function TF = validateDirStruct(dirStruct)
 TF = false;
 % First validate whether the structure contains the required fields or not.
