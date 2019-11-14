@@ -1,4 +1,4 @@
-function [matchInfo, matchPtsPxls] = EstimateTform_Batch(dirStruct, ...
+function [matchInfo, matchPtsPxls, rtInfo] = EstimateTform_Batch(dirStruct, ...
     imgNumStruct, varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
@@ -132,8 +132,12 @@ numImgs = length(fileList);         % Total number of images
 matchPtsCount = zeros(numImgs, 1);  % Store matching points
 regRigidError = zeros(numImgs, 1);  % Hold the error from ICP algorithm
 imgName = cell(numImgs, 1);         % Name of each image
-imgName{1,1} = ['rgbImg_', num2str(fileNumbers(1)), '.jpg'];    % 1st image name
 matchPtsPxls = cell(numImgs, 2);    % Holds pair of structures
+rtInfo = cell(numImgs, 3);          % Store R and T along with the index
+
+% Default values for the 1st image/pc.
+imgName{1,1} = ['rgbImg_', num2str(fileNumbers(1)), '.jpg'];    % 1st image name
+rtInfo(1, :) = {1, eye(3,3), [0, 0, 0]};
 
 % If there is only 1 image then then there is no point in finding the matches.
 if numImgs < 2
@@ -249,6 +253,8 @@ for iNum = 1:numImgs-1
     rtNameMoved = ['rt_', num2str(movedNum), '.txt'];
     rtFullNameMoved = [dirName, '/', rtFolderName, '/', rtNameMoved];
     WriteRT(tformMoved2Anchor, rtFullNameMoved);
+    rtInfo(movedIndx, :) = {movedIndx, tformMoved2Anchor.R, tformMoved2Anchor.T'};
+
     % If needed display the point cloud
     if dispFlag.pcPair == 1
         DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved,...
@@ -264,6 +270,10 @@ LogInfo(logFileName, logString);
 % Create a table out of "matched point count" and "rmse" along with names
 matchInfo = table(imgName, matchPtsCount, regRigidError, ...
      'VariableNames', {'Name', 'Matched_Points', 'ICP_RMSE'});
+
+% Create a table for R|T
+rtInfo = table(cell2mat(rtInfo(:,1)), rtInfo(:,2), rtInfo(:,3), ...
+    'VariableNames', {'ViewId', 'Orientation', 'Location'});
 end
 
 %%
