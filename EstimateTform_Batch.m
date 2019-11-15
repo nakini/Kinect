@@ -136,7 +136,7 @@ matchPtsPxls = cell(numImgs, 2);    % Holds pair of structures
 rtInfo = cell(numImgs, 3);          % Store R and T along with the index
 
 % Default values for the 1st image/pc.
-imgName{1,1} = ['rgbImg_', num2str(fileNumbers(1)), '.jpg'];    % 1st image name
+imgName{1,1} = num2str(fileNumbers(1));    % 1st image name
 rtInfo(1, :) = {1, eye(3,3), [0, 0, 0]};
 
 % If there is only 1 image then then there is no point in finding the matches.
@@ -193,7 +193,7 @@ for iNum = 1:numImgs-1
     % Display the image names that were supposed to be matched
     rgbNameAnch = ['rgbImg_', num2str(anchNum), '.jpg'];
     rgbNameMoved = ['rgbImg_', num2str(movedNum), '.jpg'];
-    imgName{movedIndx, 1} = rgbNameMoved;
+    imgName{movedIndx, 1} = num2str(movedNum);
     fprintf('Matching -- %s and %s\n\n', rgbNameAnch, rgbNameMoved);
     
     % Match two RGB images
