@@ -1,5 +1,5 @@
-function [xyzRefinedPoints,refinedPoses, ptsList, rtInfo] = BundleAdjustment_Batch(dirStruct, ...
-    matchInfo, matchPtsPxls, rtInfo, varargin)
+function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
+    matchInfo, matchPtsPxls, rtRaw, varargin)
 % In this function, I am going to read all the point clouds along with the RGB
 % images and the pair wise matching pixels and carry out the bundle adjustment
 % to optimize the transformation parameters and the 3D points.
@@ -28,9 +28,10 @@ function [xyzRefinedPoints,refinedPoses, ptsList, rtInfo] = BundleAdjustment_Bat
 %
 % OUTPUT(s)
 % =========
-% 1. xyzPts: Px3 3D points from all views
-%
-% 2. tformMats: Transformation matrices for all the views
+% 1. refinedStruct, rawStruct: These two structs hold the following the
+% non-refined and refinded info, respectively. Each structure has:
+%   1) xyz -- Px3 3D points from all views
+%   2) rt -- Px3 table of transformation matrices for all the views
 %
 % Example(s):
 %
@@ -39,7 +40,7 @@ function [xyzRefinedPoints,refinedPoses, ptsList, rtInfo] = BundleAdjustment_Bat
 
 % Validate input arguments ----------------------------------------------------
 p = inputParser;
-p.StructExpand = false;             % Accept strutcture as one element
+p.StructExpand = false;                 % Accept strutcture as one element
 
 % Parameters to be used to match 2 RGB images
 % Calibration parameters of the Kinect sensors
@@ -52,7 +53,7 @@ addRequired(p, 'matchPtsPxls', @validateMatchPtsPxls);
 addRequired(p, 'rtInfo', @validateRtInfo);
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 
-p.parse(dirStruct, matchInfo, matchPtsPxls, rtInfo, varargin{:});
+p.parse(dirStruct, matchInfo, matchPtsPxls, rtRaw, varargin{:});
 disp(p.Results);
 
 % Store variales into local variables to save typing
@@ -67,15 +68,15 @@ matchPtsPxls = p.Results.matchPtsPxls;
 % Create the respective lists that will hold all the 3D and 2D points for all 
 % images.
 totalPts = sum(matchInfo.Matched_Points);   % Total number points from all images
-ptsList = zeros(totalPts, 3);               % 3D point list
+xyzRaw = zeros(totalPts, 3);                % 3D point list
 pxlList(1, 1:totalPts) = pointTrack;        % 2D pixel list of pointTrack objs
 
 % Go through each pair and load the transformation matrix, the point cloud
 numImgs = size(matchInfo, 1);
-rtInfo = cell(numImgs, 3);                  % Store R and T along with the index
-rtInfo(1, :) = {1, eye(3,3), [0, 0, 0]};    % 1st image is the anchor
+rtRaw = cell(numImgs, 3);                  % Store R and T along with the index
+rtRaw(1, :) = {1, eye(3,3), [0, 0, 0]};    % 1st image is the anchor
 endIndx = 0;
-for iImg = 2:numImgs                        % Ignore the 1st pair which is empty
+for iImg = 2:numImgs                       % Ignore the 1st pair which is empty
     indxAnch = iImg - 1;
     indxMoved = iImg;
     
@@ -99,7 +100,7 @@ for iImg = 2:numImgs                        % Ignore the 1st pair which is empty
     pcMovedMtcPts = pcMoved.Location(matchPtsPxls{iImg, 2}.indxPC, :);
     
 	% Store the matching 3D points list
-    ptsList(startIndx:endIndx, :) = pcMovedMtcPts;
+    xyzRaw(startIndx:endIndx, :) = pcMovedMtcPts;
     
     % Create pointTrack object for each pixel pair
     % ============================================
@@ -121,26 +122,52 @@ for iImg = 2:numImgs                        % Ignore the 1st pair which is empty
     rtFullName = [tmpRTName, char(movedName), '.txt'];
     % Read the text file which will return a sturct with R(3x3), and T(3,1)
     tformMoved2Anchor = ReadRT(rtFullName);
-    rtInfo(indxMoved, :) = {indxMoved, tformMoved2Anchor.R, tformMoved2Anchor.T'};
+    rtRaw(indxMoved, :) = {indxMoved, tformMoved2Anchor.R, tformMoved2Anchor.T'};
 end
 
 % Create a table for R|T
-rtInfo = table(cell2mat(rtInfo(:,1)), rtInfo(:,2), rtInfo(:,3), ...
+rtRaw = table(cell2mat(rtRaw(:,1)), rtRaw(:,2), rtRaw(:,3), ...
     'VariableNames', {'ViewId', 'Orientation', 'Location'});
 
 % Load the camera intrinsic parameters and create an object
 load(calibStereo, 'KK_left', 'KK_right');
 KK_RGB = KK_left;
 camParams = cameraParameters('IntrinsicMatrix', KK_RGB);
-rtInfo.ViewId = uint32(rtInfo.ViewId);	% cameraPoses only takes IDs as uint32
+rtRaw.ViewId = uint32(rtRaw.ViewId);	% cameraPoses only takes IDs as uint32
 
 % Bundle Adjustment
 % =================
 % Carry out the bundle adjustment using the R|T's in the form of a table,
 % intrinsic parameters in the form of "cameraParameters" obj and the 3D points
 % as a Nx3 matrix.
-[xyzRefinedPoints,refinedPoses] = bundleAdjustment(ptsList, pxlList, rtInfo, ...
+[xyzRefinedts,refinedRT] = bundleAdjustment(xyzRaw, pxlList, rtRaw, ...
     camParams, 'FixedViewIDs', 1,  'RelativeTolerance', 1e-10, 'MaxIterations', 100);
+
+% Update R|T
+% ==========
+% Go through all the rt_*.txt files and update it with the current finding of
+% bundle adjustments.
+for iN = 1:numImgs
+    % Create a file name for RT
+    tmpRTName = [dirStruct.dirName, '/', dirStruct.rtFolderName, '/rt_'];
+    rtNum = matchInfo.Name(iN, 1);
+    rtFullName = [tmpRTName, char(rtNum), '.txt'];
+    
+    % Read the text file which will return a sturct with R(3x3), and T(3,1)
+    tformMoved2Anchor = ReadRT(rtFullName);
+    
+    % Update the current RT values
+    tformMoved2Anchor.R = cell2mat(refinedPoses.Orientation(iN,1));
+    tformMoved2Anchor.T = cell2mat(refinedPoses.Location(iN,1))';
+    
+    % Write the RT values into the file
+    WriteRT(tformMoved2Anchor, rtFullName); 
+end
+disp('Updated all the R|T values in the rt*_.txt files');
+
+% Output:
+refinedStruct = struct('xyz', xyzRefinedts, 'rt', refinedRT);
+rawStruct = struct('xyz', xyzRaw, 'rt', rtRaw);
 end
 
 %% Input arguments valiating functions
