@@ -50,14 +50,20 @@ function [matchInfo, matchPtsPxls, rtInfo] = EstimateTform_Batch(dirStruct, ...
 %
 % OUTPUT(s)
 % =========
-% 1. matchInfo: Mx3 table storing RGB image names, number of matched points of 
-% each image with the previous one and the "rmse" value from rigid registration.
-% The count and rmse for the 1st image will be 0 and 0, respectively.
+% 1. matchInfo: Mx4 table
+%   1) Anchor, Moved -- Image names of the anchor and moved image, respectively
+%   2) Matched_Points -- Number of matched points of between two images
+%   3) ICP_RMSE -- the "rmse" value from rigid registration
+%   4) PtsPxls_Anch, PtsPxls_Moved -- Matched pixles info of the anchor and the
+%   moved image, respectively. And each element of the column is a structure,
+%   which holds the following fields.
+%       a) indxPC -- Px1 vector of indices of matched 3D points of point cloud
+%       b) pixelsRGB -- Px2 matrix of 2D pixels of matched RGB image
 %
-% 2. matchPtsPxls: Mx2 Cell storing a pair of structures. Each structure in the
-% pair, holds the following fields.
-%   1) indxPC -- Px1 vector of indices of matched 3D points of point cloud
-%   2) pixelsRGB -- Px2 matrix of 2D pixels of matched RGB image
+% 2. rtInfo: Mx3 table
+%   1) ViewID -- View number (1 through number of images)
+%   2) Orientation -- Rotation matrix w.r.t anchor/pc
+%   3) Translation -- Translation vector w.r.t. anchor image/pc
 %
 % Example(s)
 % ==========
@@ -116,6 +122,8 @@ fileNumbers = [];               % Store the numbers given to the images
 imgIndx = 1;                    % Counter
 % Create a list of files
 % ======================
+% Here, we will create a list of files and in the end of the list we will append
+% the 1st number to complere the loop.
 while imgNumStruct.startIndx < imgNumStruct.endIndx
     imgNum = imgNumStruct.startIndx;
     rgbName = ['rgbImg_', num2str(imgNum), '.jpg'];
@@ -127,17 +135,24 @@ while imgNumStruct.startIndx < imgNumStruct.endIndx
     end
     imgNumStruct.startIndx = imgNumStruct.startIndx + 1;   % Check the next one
 end
+fileList{imgIndx} = fileList{1};	% Add the 1st to the end of the list
+fileNumbers(imgIndx) = fileNumbers(1);
 
-numImgs = length(fileList);         % Total number of images
+numImgs = length(fileList)-1;       % Total number of images
 matchPtsCount = zeros(numImgs, 1);  % Store matching points
 regRigidError = zeros(numImgs, 1);  % Hold the error from ICP algorithm
-imgName = cell(numImgs, 1);         % Name of each image
+imgName = cell(numImgs, 2);         % Name of matching image pair
 matchPtsPxls = cell(numImgs, 2);    % Holds pair of structures
-rtInfo = cell(numImgs, 3);          % Store R and T along with the index
 
-% Default values for the 1st image/pc.
-imgName{1,1} = num2str(fileNumbers(1));    % 1st image name
-rtInfo(1, :) = {1, eye(3,3), [0, 0, 0]};
+% Store R and T along with the view index. Also set the default values for the
+% 1st image/pc.
+rtInfo = cell(numImgs+1, 4);        % Also includes the R|T of 1st image
+rtFromTo = [num2str(fileNumbers(1)), '_to_', num2str(fileNumbers(1))];
+rtInfo(1, :) = {1, eye(3,3), [0, 0, 0], rtFromTo};
+% Also save the same into a file
+rtNameBase = ['rt_', rtFromTo, '.txt'];
+rtFullNameBase = [dirName, '/', rtFolderName, '/', rtNameBase];
+WriteRT(struct('R', eye(3,3), 'T', zeros(3,1)), rtFullNameBase);
 
 % If there is only 1 image then then there is no point in finding the matches.
 if numImgs < 2
@@ -145,47 +160,51 @@ if numImgs < 2
     return
 end
 
+% Load Calibration Parameters
+% ===========================
 % Before going through each pair of images and finding out the correspondences,
 % read the calibration parameters and create a structure to holding 
 % transformation matrix, etc...
 tformDepth2RGB = TformMatFromCalibration(calibStereo);
 
+% Iterate through the list
+% ========================
 % File name that is going to store all the log information.
 logFileName = [dirName, '/', rtFolderName, '/Log-', date, '.txt'];
 logString = string(['Processings started at: ', datestr(datetime), '\n']);
 LogInfo(logFileName, logString);
-% Iterate through the list
-% ========================
+
 % Load a pair of images at a time and find the correspondence. The first image
 % will be the anchor image and the 2nd will be the moved point cloud
-for iNum = 1:numImgs-1
+for iNum = 1:numImgs
+    % For the last image pair, make the last+1 (which is in fact the 1st images)
+    % as the anchor image
+    if iNum == numImgs              % Only for the LAST pair
+        anchIndx = iNum+1;
+        movedIndx = iNum;
+    else                            % For the rest of the pairs
+        anchIndx = iNum;
+        movedIndx = iNum + 1;
+    end
+
     % Read the 1st RGB image & PC
     % ===========================
     % Here, we are also going to read corresponding rt*.txt file if exists. If
     % not we are going to crate one.
-    anchNum = fileNumbers(iNum);
-    rgbFullNameAnch = fileList{iNum};
+    anchNum = fileNumbers(anchIndx);
+    rgbFullNameAnch = fileList{anchIndx};
     rgbImgAnch = imread(rgbFullNameAnch);   % Read 1st image
     % Read teh 2st point cloud corresponding to the RGB image
     pcNameAnch = ['depthImg_', num2str(anchNum), '.ply'];
     pcFullNameAnch = [dirName, '/', plyFolderName, '/', pcNameAnch];
     pcAnch = pcread(pcFullNameAnch);        % 1st point cloud
     
-    % Check for the 1st R|T text file. If it doesn't exist the create one with 
-    % default values.
-    rtNameAnch = ['rt_', num2str(anchNum), '.txt'];
-    rtFullNameAnch = [dirName, '/', rtFolderName, '/', rtNameAnch];
-    if ~(exist(rtFullNameAnch, 'file') == 2)
-        WriteRT(struct('R', eye(3,3), 'T', zeros(3,1)), rtFullNameAnch);
-    end
-
     % Read the 2nd RGB image & PC
     % ===========================
-    movedIndx = iNum + 1;
     movedNum = fileNumbers(movedIndx);
     % Read the 2nd point cloud
-    rgbNameFullMoved = fileList{movedIndx};
-    rgbImgMoved = imread(rgbNameFullMoved); % Read 2nd image
+    rgbFullNameMoved = fileList{movedIndx};
+    rgbImgMoved = imread(rgbFullNameMoved); % Read 2nd image
     pcNameMoved = ['depthImg_', num2str(movedNum), '.ply'];
     pcFullNameMoved = [dirName, '/', plyFolderName, '/', pcNameMoved];
     pcMoved = pcread(pcFullNameMoved);      % 2nd point cloud
@@ -193,7 +212,8 @@ for iNum = 1:numImgs-1
     % Display the image names that were supposed to be matched
     rgbNameAnch = ['rgbImg_', num2str(anchNum), '.jpg'];
     rgbNameMoved = ['rgbImg_', num2str(movedNum), '.jpg'];
-    imgName{movedIndx, 1} = num2str(movedNum);
+    imgName{iNum, 1} = num2str(anchNum);    % Store the names
+    imgName{iNum, 2} = num2str(movedNum);
     fprintf('Matching -- %s and %s\n\n', rgbNameAnch, rgbNameMoved);
     
     % Match two RGB images
@@ -231,8 +251,8 @@ for iNum = 1:numImgs-1
         'tformDepth2RGB', tformDepth2RGB);
     [mtchAnchStct, mtchMovedStct] = FindMatched3DPoints(pcStructAnch, ...
         pcStructMoved);
-    matchPtsCount(movedIndx, 1) = size(mtchAnchStct.indxPC, 1);
-    matchPtsPxls(movedIndx, :) = {mtchAnchStct, mtchMovedStct};
+    matchPtsCount(iNum, 1) = size(mtchAnchStct.indxPC, 1);
+    matchPtsPxls(iNum, :) = {mtchAnchStct, mtchMovedStct};
     
     % Find the transformation
     % =======================
@@ -243,37 +263,41 @@ for iNum = 1:numImgs-1
     pcStructMoved = struct('pc', pcMoved, 'matchIndx', mtchMovedStct.indxPC);
     [tformMoved2Anchor, rmse, regStats] = FindTransformationPC2toPC1(pcStructAnch, ...
         pcStructMoved, regrigidStruct);
-    regRigidError(movedIndx, 1) = rmse;
+    regRigidError(iNum, 1) = rmse;
     
     % Log, Save and Display
     % =====================
     LogRegistrationStatus(regStats, pcNameAnch, pcNameMoved, ...
-        matchPtsCount(movedIndx, 1), logFileName);
+        matchPtsCount(iNum, 1), logFileName);
     % Save the transformation matrix into a file
-    rtNameMoved = ['rt_', num2str(movedNum), '.txt'];
+    rtFromTo = [num2str(movedNum), '_to_', num2str(anchNum)];
+    rtNameMoved = ['rt_', rtFromTo, '.txt'];
     rtFullNameMoved = [dirName, '/', rtFolderName, '/', rtNameMoved];
     WriteRT(tformMoved2Anchor, rtFullNameMoved);
-    rtInfo(movedIndx, :) = {movedIndx, tformMoved2Anchor.R, tformMoved2Anchor.T'};
+    rtInfo(iNum+1, :) = {movedIndx, tformMoved2Anchor.R, tformMoved2Anchor.T', ...
+        rtFromTo};
 
     % If needed display the point cloud
     if dispFlag.pcPair == 1
-        DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved,...
-            tformMoved2Anchor);
+        DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved, tformMoved2Anchor);
     end
 end
 
 % Store the total number of files processed status
-logString = string(['\nTotal number of files processed: ', num2str(movedIndx),...
-    '\n\n']);
+logString = string(['\nPair of files processed in total: ', num2str(iNum), '\n\n']);
 LogInfo(logFileName, logString);
 
-% Create a table out of "matched point count" and "rmse" along with names
-matchInfo = table(imgName, matchPtsCount, regRigidError, ...
-     'VariableNames', {'Name', 'Matched_Points', 'ICP_RMSE'});
+% Outputs
+% =======
+% Create a table out of "matched point count" and "rmse" along with names and
+% the matching pixels of anchor and moved pc
+matchInfo = table(imgName(:,1), imgName(:,2), matchPtsCount, regRigidError, ...
+     matchPtsPxls(:,1), matchPtsPxls(:,2), 'VariableNames', {'Anchor', ...
+     'Moved', 'Matched_Points', 'ICP_RMSE', 'PtsPxls_Anch', 'PtsPxls_Moved'});
 
 % Create a table for R|T
-rtInfo = table(cell2mat(rtInfo(:,1)), rtInfo(:,2), rtInfo(:,3), ...
-    'VariableNames', {'ViewId', 'Orientation', 'Location'});
+rtInfo = table(cell2mat(rtInfo(:,1)), rtInfo(:,2), rtInfo(:,3), rtInfo(:,4), ...
+    'VariableNames', {'ViewId', 'Orientation', 'Location', 'Moved_To_Anchor'});
 end
 
 %%
