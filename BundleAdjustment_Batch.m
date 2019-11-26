@@ -88,22 +88,27 @@ totalPts = sum(matchInfo.Matched_Points);   % Total number points from all image
 xyzRaw = zeros(totalPts, 3);                % 3D point list
 pxlList(1, 1:totalPts) = pointTrack;        % 2D pixel list of pointTrack objs
 
-% Go through each pair and load the transformation matrix, the point cloud
-numImgs = size(matchInfo, 1);
+numImgPairs = size(matchInfo, 1);           % Total number image pairs
 
 % Container to store R and T values along with the veiw-id of each view if it is
 % not provided by the user. Also add one more view to close the loop.
 if defaultRtFalg == false
-    rtRaw = cell(numImgs+1, 3);
-    rtRaw(1, :) = {1, eye(3,3), [0, 0, 0]};     % 1st image is the anchor
+    rtRaw = cell(numImgPairs+1, 3);
+    rtRaw(1, :) = {1, eye(3,3), [0, 0, 0]};	% 1st image is the base
 end
 
 endIndxMatchPts = 0;
-baseName = matchInfo.Anchor(1);             % Every pc is represented w.r.t 1st one
-for iImg = 1:numImgs
-    numMtchPts = matchInfo.Matched_Points(iImg, 1);     % Number of points
-    anchName = matchInfo.Anchor(iImg);                  % Name of the pc
-    movedName = matchInfo.Moved(iImg);
+baseName = matchInfo.Anchor(1);             % Every pc is represented w.r.t base
+% Go through each pair and read the anchor and moved point clouds. Then create
+% pointTrack object for each pixel and 3D point point pairs from every given
+% matching pair. Also, if needed, read the RT matrices and create a table.
+for iImPrs = 1:numImgPairs
+    numMtchPts = matchInfo.Matched_Points(iImPrs, 1);	% Number of points
+    anchName = matchInfo.Anchor(iImPrs);                % Anchor pc name
+    movedName = matchInfo.Moved(iImPrs);                % Moved pc name
+    % Following two variable act like pointer to starting and end index to keep
+    % track of matching points for each pair in the long-list of whole matching
+    % pairs.
     startIndxMatchPts = endIndxMatchPts + 1;
     endIndxMatchPts  = endIndxMatchPts + numMtchPts;
     
@@ -117,8 +122,8 @@ for iImg = 1:numImgs
     % Load the pcs and segregate the matching points from each pair
     pcAnch = pcread(pcFullNameAnch);
     pcMoved = pcread(pcFullNameMoved);
-    pcAnchMtcPts = pcAnch.Location(matchInfo.PtsPxls_Anch{iImg}.indxPC, :);
-    pcMovedMtcPts = pcMoved.Location(matchInfo.PtsPxls_Moved{iImg}.indxPC, :);
+    pcAnchMtcPts = pcAnch.Location(matchInfo.PtsPxls_Anch{iImPrs}.indxPC, :);
+    pcMovedMtcPts = pcMoved.Location(matchInfo.PtsPxls_Moved{iImPrs}.indxPC, :);
     
 	% Store the matching 3D points list
     xyzRaw(startIndxMatchPts:endIndxMatchPts, :) = pcMovedMtcPts;
@@ -127,9 +132,9 @@ for iImg = 1:numImgs
     % ============================================
     % Save the 2D pixel points into a pointTrack class -- It takes the multiple
     % pixels from multiple views and the view-ids and creates an object.
-    pxlAnch = matchInfo.PtsPxls_Anch{iImg}.pixelsRGB;
-    pxlMoved = matchInfo.PtsPxls_Moved{iImg}.pixelsRGB;
-    currViewIDs = [matchInfo.Anchor_ViewID(iImg), matchInfo.Moved_ViewID(iImg)];
+    pxlAnch = matchInfo.PtsPxls_Anch{iImPrs}.pixelsRGB;
+    pxlMoved = matchInfo.PtsPxls_Moved{iImPrs}.pixelsRGB;
+    currViewIDs = [matchInfo.Anchor_ViewID(iImPrs), matchInfo.Moved_ViewID(iImPrs)];
     for iTrk = 1:numMtchPts
         pxlList(1, startIndxMatchPts+iTrk-1) = pointTrack(currViewIDs, ...
             [pxlAnch(iTrk, :); pxlMoved(iTrk, :)]);
@@ -145,7 +150,7 @@ for iImg = 1:numImgs
         % Read the text file which will return a sturct with R(3x3), and T(3,1)
         [tformMoved2Anchor, fileReadFlag] = ReadRT(rtFullName);
         if fileReadFlag == true
-            rtRaw(iImg+1, :) = {matchInfo.Moved_ViewID(iImg), ...
+            rtRaw(iImPrs+1, :) = {matchInfo.Moved_ViewID(iImPrs), ...
                 tformMoved2Anchor.R, tformMoved2Anchor.T'};
         else
             error("Unable to read the RT file!!!");
@@ -177,7 +182,7 @@ rtRaw.ViewId = uint32(rtRaw.ViewId);	% cameraPoses only takes IDs as uint32
 % ==========
 % Go through all the rt_*.txt files and update it with the current finding of
 % bundle adjustments.
-for iN = 2:numImgs+1
+for iN = 2:numImgPairs+1
     % Create a file name for RT
     rtFullName = [dirName, '/', rtFolderName, '/Absolute/rt_',  ...
         char(matchInfo.Moved(iN-1)), '_to_', char(baseName), '.txt'];
