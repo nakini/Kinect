@@ -1,5 +1,5 @@
-function [matchInfo, matchPtsPxls, rtInfo] = EstimateTform_Batch(dirStruct, ...
-    imgNumStruct, varargin)
+function [matchInfo, rtInfo] = EstimateTform_Batch(dirStruct, imgNumStruct, ...
+    varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
 % matched pixels I will figure out the corresponding 3D points for each RGB
@@ -72,10 +72,10 @@ function [matchInfo, matchPtsPxls, rtInfo] = EstimateTform_Batch(dirStruct, ...
 %       'rtFolderName', 'PCinXYZNorTri_woPlane_Testing');
 %   mtchPts = EstimateTform_Batch(dirStruct, imgNumStruct);
 
-%------------------------------------------------------------------------------
-%------------------------------- START ----------------------------------------
+%-------------------------------------------------------------------------------
+%------------------------------- START -----------------------------------------
 
-% Validate input arguments ----------------------------------------------------
+% Validate input arguments -----------------------------------------------------
 p = inputParser;
 p.StructExpand = false;             % Accept structure as one element
 
@@ -113,8 +113,15 @@ calibStereo = p.Results.calibStereo;
 dispFlag = p.Results.dispFlag;
 cornerTech = p.Results.cornerTech;
 regrigidStruct = p.Results.regrigidStruct;
+% If the sub-folder "Relative" doesn't exist then create to store all the
+% pairwise relative transformation matrices.
+rtSubFolderName = [dirName, '/', rtFolderName, '/Relative'];
+if ~(exist(rtSubFolderName, 'dir') == 7)
+    % Create the folder to save the files
+    mkdir(rtSubFolderName);
+end
 
-% Algorithm -------------------------------------------------------------------
+% Algorithm --------------------------------------------------------------------
 % First I am going to go through all the files in the given range and create a
 % list.
 fileList = [];                  % Store a list of image files with complete path
@@ -151,7 +158,7 @@ rtFromTo = [num2str(fileNumbers(1)), '_to_', num2str(fileNumbers(1))];
 rtInfo(1, :) = {1, eye(3,3), [0, 0, 0], rtFromTo};
 % Also save the same into a file
 rtNameBase = ['rt_', rtFromTo, '.txt'];
-rtFullNameBase = [dirName, '/', rtFolderName, '/', rtNameBase];
+rtFullNameBase = [rtSubFolderName, '/', rtNameBase];
 WriteRT(struct('R', eye(3,3), 'T', zeros(3,1)), rtFullNameBase);
 
 % If there is only 1 image then then there is no point in finding the matches.
@@ -272,7 +279,7 @@ for iNum = 1:numImgs
     % Save the transformation matrix into a file
     rtFromTo = [num2str(movedNum), '_to_', num2str(anchNum)];
     rtNameMoved = ['rt_', rtFromTo, '.txt'];
-    rtFullNameMoved = [dirName, '/', rtFolderName, '/', rtNameMoved];
+    rtFullNameMoved = [rtSubFolderName, '/', rtNameMoved];
     WriteRT(tformMoved2Anchor, rtFullNameMoved);
     rtInfo(iNum+1, :) = {movedIndx, tformMoved2Anchor.R, tformMoved2Anchor.T', ...
         rtFromTo};
