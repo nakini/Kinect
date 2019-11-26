@@ -50,7 +50,7 @@ function [matchInfo, rtInfo] = EstimateTform_Batch(dirStruct, imgNumStruct, ...
 %
 % OUTPUT(s)
 % =========
-% 1. matchInfo: Mx4 table
+% 1. matchInfo: Mx8 table
 %   1) Anchor, Moved -- Image names of the anchor and moved image, respectively
 %   2) Matched_Points -- Number of matched points of between two images
 %   3) ICP_RMSE -- the "rmse" value from rigid registration
@@ -59,6 +59,8 @@ function [matchInfo, rtInfo] = EstimateTform_Batch(dirStruct, imgNumStruct, ...
 %   which holds the following fields.
 %       a) indxPC -- Px1 vector of indices of matched 3D points of point cloud
 %       b) pixelsRGB -- Px2 matrix of 2D pixels of matched RGB image
+%   5) Anchor_ViewID, Moved_ViewID -- View ids of anchor and moved pc for each
+%   pair, respectively.
 %
 % 2. rtInfo: Mx3 table
 %   1) ViewID -- View number (1 through number of images)
@@ -150,6 +152,11 @@ matchPtsCount = zeros(numImgs, 1);  % Store matching points
 regRigidError = zeros(numImgs, 1);  % Hold the error from ICP algorithm
 imgName = cell(numImgs, 2);         % Name of matching image pair
 matchPtsPxls = cell(numImgs, 2);    % Holds pair of structures
+% For Bundle adjustment, we also need the view-ids which is nothing but a
+% sequential view number.
+viewIDList = 1:numImgs+1;
+viewIDList(end) = 1;                % Last ID is 1 for the loop closure.
+viewIDPairs = zeros(numImgs, 2);    % Hold a pair of view IDs
 
 % Store R and T along with the view index. Also set the default values for the
 % 1st image/pc.
@@ -193,7 +200,9 @@ for iNum = 1:numImgs
         anchIndx = iNum;
         movedIndx = iNum + 1;
     end
-
+    % Save the view-id
+    viewIDPairs(iNum, :) = [viewIDList(anchIndx), viewIDList(movedIndx)];
+    
     % Read the 1st RGB image & PC
     % ===========================
     % Here, we are also going to read corresponding rt*.txt file if exists. If
@@ -299,8 +308,9 @@ LogInfo(logFileName, logString);
 % Create a table out of "matched point count" and "rmse" along with names and
 % the matching pixels of anchor and moved pc
 matchInfo = table(imgName(:,1), imgName(:,2), matchPtsCount, regRigidError, ...
-     matchPtsPxls(:,1), matchPtsPxls(:,2), 'VariableNames', {'Anchor', ...
-     'Moved', 'Matched_Points', 'ICP_RMSE', 'PtsPxls_Anch', 'PtsPxls_Moved'});
+     matchPtsPxls(:,1), matchPtsPxls(:,2), viewIDPairs(:,1), viewIDPairs(:, 2), ...
+     'VariableNames', {'Anchor', 'Moved', 'Matched_Points', 'ICP_RMSE', ...
+     'PtsPxls_Anch', 'PtsPxls_Moved', 'Anchor_ViewID', 'Moved_ViewID'});
 
 % Create a table for R|T
 rtInfo = table(cell2mat(rtInfo(:,1)), rtInfo(:,2), rtInfo(:,3), rtInfo(:,4), ...
