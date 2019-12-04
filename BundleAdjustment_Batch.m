@@ -112,22 +112,6 @@ for iImPrs = 1:numImgPairs
     startIndxMatchPts = endIndxMatchPts + 1;
     endIndxMatchPts  = endIndxMatchPts + numMtchPts;
     
-    % Read the save point clouds
-    % ==========================
-    % Names of the point clouds
-    tmpPlyName = [dirName, '/', plyFolderName, '/depthImg_'];
-    pcFullNameAnch = [tmpPlyName, char(anchName), '.ply'];
-    pcFullNameMoved = [tmpPlyName, char(movedName), '.ply'];
-    
-    % Load the pcs and segregate the matching points from each pair
-    pcAnch = pcread(pcFullNameAnch);
-    pcMoved = pcread(pcFullNameMoved);
-    pcAnchMtcPts = pcAnch.Location(matchInfo.PtsPxls_Anch{iImPrs}.indxPC, :);
-    pcMovedMtcPts = pcMoved.Location(matchInfo.PtsPxls_Moved{iImPrs}.indxPC, :);
-    
-	% Store the matching 3D points list
-    xyzRaw(startIndxMatchPts:endIndxMatchPts, :) = pcMovedMtcPts;
-    
     % Create pointTrack object for each pixel pair
     % ============================================
     % Save the 2D pixel points into a pointTrack class -- It takes the multiple
@@ -156,6 +140,22 @@ for iImPrs = 1:numImgPairs
             error("Unable to read the RT file!!!");
         end
     end
+    
+    % Read the save point clouds
+    % ==========================
+    % Names of the point clouds
+    tmpPlyName = [dirName, '/', plyFolderName, '/depthImg_'];
+    pcFullNameMoved = [tmpPlyName, char(movedName), '.ply'];
+    
+    % Load the pcs, transform them into the GLOBAL coordinate frame and 
+    % segregate the matching points from each pair
+    pcMoved = pcread(pcFullNameMoved);
+    pcMoved_Global = TransformPointCloud(pcMoved, struct('R', rtRaw.Orientation{iImPrs+1},...
+        'T', rtRaw.Location{iImPrs+1}'));
+    pcMovedMtcPts_Global = pcMoved_Global.Location(matchInfo.PtsPxls_Moved{iImPrs}.indxPC, :);
+    
+	% Store the matching point
+    xyzRaw(startIndxMatchPts:endIndxMatchPts, :) = pcMovedMtcPts_Global;
 end
 
 % Create a table for R|T if not provided by the user
