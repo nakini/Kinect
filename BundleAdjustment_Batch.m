@@ -27,12 +27,15 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 %   5) Anchor_ViewID, Moved_ViewID -- View ids of anchor and moved pc for each
 %   pair, respectively.
 %
-% 3. ['rtRaw', rtRaw]: (M+1)x3 table
+% 3. ['rtRaw_Curr2Global', rtRaw_Curr2Global]: (M+1)x3 table
 %   1) ViewId: View-id of each point cloud
 %   2) Orientation: Rotation matrix corresponding to each view
 %   3) Location: Translation of each view
 % The last view will have 2 transformations w.r.t to the base -- One through the
-% previous point cloud and the other is direct to the base pc.
+% previous point cloud and the other is direct to the base pc. This will act as
+% a loop closure. All the transformations will transform the points in current
+% view to the base/global coordinate frame, i.e.,
+%       X_g = R*X_curr + T;
 %
 % 4. ['calibStereo', calibStereo]: Mat-file holding stereo calibration
 % parameters between IR and RGB of the Kinect that was used to collect the data.
@@ -61,7 +64,7 @@ defaultRtFalg = true;                   % Assume input RTs are not given by user
 
 addRequired(p, 'dirStruct', @validateDirStruct);
 addRequired(p, 'matchInfo', @validdateMatchInfo);
-addParameter(p, 'rtRaw', defaultRtFalg, @validateRtInfo);
+addParameter(p, 'rtRaw_Curr2Global', defaultRtFalg, @validateRtInfo);
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 
 p.parse(dirStruct, matchInfo, varargin{:});
@@ -73,42 +76,27 @@ rtFolderName = dirStruct.rtFolderName;
 plyFolderName = dirStruct.plyFolderName;
 calibStereo = p.Results.calibStereo;
 matchInfo = p.Results.matchInfo;
-rtRaw = p.Results.rtRaw;
-if ~istable(rtRaw)
-    defaultRtFalg = false;
-    disp('Reading RTs from the text files');
-else
-    disp('Reading RTs provided by the user');
-end
+rtRaw_Curr2Global = p.Results.rtRaw_Curr2Global;
 
 % Algorithm --------------------------------------------------------------------
 % Create the respective lists that will hold all the 3D and 2D points for all 
 % images.
 totalPts = sum(matchInfo.Matched_Points);   % Total number points from all images
-xyzRaw = zeros(totalPts, 3);                % 3D point list
+xyzRaw_Global = zeros(totalPts, 3);         % 3D point list
 pxlList(1, 1:totalPts) = pointTrack;        % 2D pixel list of pointTrack objs
 
 numImgPairs = size(matchInfo, 1);           % Total number image pairs
-
-% Container to store R and T values along with the veiw-id of each view if it is
-% not provided by the user. Also add one more view to close the loop.
-if defaultRtFalg == false
-    rtRaw = cell(numImgPairs+1, 3);
-    rtRaw(1, :) = {1, eye(3,3), [0, 0, 0]};	% 1st image is the base
-end
+rtRaw_Global2Curr  = rtRaw_Curr2Global;     % Transformation matrix for each pc
 
 endIndxMatchPts = 0;
-baseName = matchInfo.Anchor(1);             % Every pc is represented w.r.t base
 % Go through each pair and read the anchor and moved point clouds. Then create
 % pointTrack object for each pixel and 3D point point pairs from every given
 % matching pair. Also, if needed, read the RT matrices and create a table.
 for iImPrs = 1:numImgPairs
-    numMtchPts = matchInfo.Matched_Points(iImPrs, 1);	% Number of points
-    anchName = matchInfo.Anchor(iImPrs);                % Anchor pc name
-    movedName = matchInfo.Moved(iImPrs);                % Moved pc name
     % Following two variable act like pointer to starting and end index to keep
     % track of matching points for each pair in the long-list of whole matching
     % pairs.
+    numMtchPts = matchInfo.Matched_Points(iImPrs, 1);	% Match point count in the pair
     startIndxMatchPts = endIndxMatchPts + 1;
     endIndxMatchPts  = endIndxMatchPts + numMtchPts;
     
@@ -124,82 +112,81 @@ for iImPrs = 1:numImgPairs
             [pxlAnch(iTrk, :); pxlMoved(iTrk, :)]);
     end
     
-    % Read R|T files
-    % ==============
-    % Read the rotation and translation from the text files if the "rtRaw" table
-    % is not provided by the user.
-    if defaultRtFalg == false
-        rtFullName = [dirName, '/', rtFolderName, '/Absolute/rt_', ...
-            char(movedName), '_to_', char(baseName), '.txt'];
-        % Read the text file which will return a sturct with R(3x3), and T(3,1)
-        [tformMoved2Anchor, fileReadFlag] = ReadRT(rtFullName);
-        if fileReadFlag == true
-            rtRaw(iImPrs+1, :) = {matchInfo.Moved_ViewID(iImPrs), ...
-                tformMoved2Anchor.R, tformMoved2Anchor.T'};
-        else
-            error("Unable to read the RT file!!!");
-        end
-    end
-    
-    % Read the save point clouds
-    % ==========================
+    % Read and transform point clouds
+    % ===============================
     % Names of the point clouds
+    anchName = matchInfo.Anchor(iImPrs);                % Anchor pc name
+    movedName = matchInfo.Moved(iImPrs);                % Moved pc name
     tmpPlyName = [dirName, '/', plyFolderName, '/depthImg_'];
     pcFullNameMoved = [tmpPlyName, char(movedName), '.ply'];
     
     % Load the pcs, transform them into the GLOBAL coordinate frame and 
     % segregate the matching points from each pair
     pcMoved = pcread(pcFullNameMoved);
-    pcMoved_Global = TransformPointCloud(pcMoved, struct('R', rtRaw.Orientation{iImPrs+1},...
-        'T', rtRaw.Location{iImPrs+1}'));
+    R = rtRaw_Curr2Global.Orientation{iImPrs+1};
+    T = rtRaw_Curr2Global.Location{iImPrs+1}';
+    pcMoved_Global = TransformPointCloud(pcMoved, struct('R', R, 'T', T));
     pcMovedMtcPts_Global = pcMoved_Global.Location(matchInfo.PtsPxls_Moved{iImPrs}.indxPC, :);
     
-	% Store the matching point
-    xyzRaw(startIndxMatchPts:endIndxMatchPts, :) = pcMovedMtcPts_Global;
+    % Store Structure and Motion
+    % ==========================
+    % Store global to current view transformation matrices. As we are taking the
+    % inverse of the homogeneous transformation matrix, we should have used
+    % inv(R) or R' for rotation, but due to Matlab's weird formats we have to
+    % use R.
+    rtRaw_Global2Curr.Orientation{iImPrs+1} = R;        % Expecting R' though
+    rtRaw_Global2Curr.Location{iImPrs+1} = (-R'*T)';
+	% Store the matching 3D point
+    xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = pcMovedMtcPts_Global;
 end
 
-% Create a table for R|T if not provided by the user
-if defaultRtFalg == false
-    rtRaw = table(cell2mat(rtRaw(:,1)), rtRaw(:,2), rtRaw(:,3), ...
-        'VariableNames', {'ViewId', 'Orientation', 'Location'});
-end
-
-% Load the camera intrinsic parameters and create an object
+% Load the camera intrinsic parameters and create an object -- Also another
+% WEIRD thing of Matlab for which we have to take the transpose of the intrinsic
+% matrix.
 load(calibStereo, 'KK_left', 'KK_right');
 KK_RGB = KK_left;
-camParams = cameraParameters('IntrinsicMatrix', KK_RGB);
-rtRaw.ViewId = uint32(rtRaw.ViewId);	% cameraPoses only takes IDs as uint32
+camParams = cameraParameters('IntrinsicMatrix', KK_RGB');
+% cameraPoses only takes IDs as uint32
+rtRaw_Global2Curr.ViewId = uint32(rtRaw_Curr2Global.ViewId);
+rtRaw_Global2Curr(end,:) = [];
 
 % Bundle Adjustment
 % =================
-% Carry out the bundle adjustment using the R|T's in the form of a table,
-% intrinsic parameters in the form of "cameraParameters" obj and the 3D points
-% as a Nx3 matrix.
-[xyzRefinedts,refinedRT] = bundleAdjustment(xyzRaw, pxlList, rtRaw, ...
-    camParams, 'FixedViewIDs', 1,  'RelativeTolerance', 1e-10, 'MaxIterations', 100);
+% For the bundle adjustment we need all the following:
+%   1) points in the global coordinate frame
+%   2) transformation matrix of each view which evaluates the 3D point in
+%   current view given the 3D points in global frame
+%   3) intrinsic parameters of the camera which will transform the the 3D points
+%   in the current view into the image frame
+%
+% In the current scenario, use the R|T's in a table form, intrinsic parameters
+% in the form of "cameraParameters" obj and the 3D points as a Nx3 matrix.
+[xyzRefinedPts,refinedRTs] = bundleAdjustment(xyzRaw_Global, pxlList, ...
+    rtRaw_Global2Curr, camParams, 'FixedViewIDs', 1,  'RelativeTolerance', 1e-10,...
+    'MaxIterations', 100, 'PointsUndistorted', true, 'Verbose', true);
 
-% Update R|T
-% ==========
-% Go through all the rt_*.txt files and update it with the current finding of
-% bundle adjustments.
-for iN = 2:numImgPairs+1
-    % Create a file name for RT
-    rtFullName = [dirName, '/', rtFolderName, '/Absolute/rt_',  ...
-        char(matchInfo.Moved(iN-1)), '_to_', char(baseName), '.txt'];
-    
-    % Update the current RT values
-    tformMoved2Anchor.R = cell2mat(refinedRT.Orientation(iN,1));
-    tformMoved2Anchor.T = cell2mat(refinedRT.Location(iN,1))';
-    
-    % Write the RT values into the file
-    WriteRT(tformMoved2Anchor, rtFullName); 
-end
-disp('Updated all the R|T values in the rt*_.txt files');
+% % Update R|T
+% % ==========
+% % Go through all the rt_*.txt files and update it with the current finding of
+% % bundle adjustments.
+% for iN = 2:numImgPairs+1
+%     % Create a file name for RT
+%     rtFullName = [dirName, '/', rtFolderName, '/Absolute/rt_',  ...
+%         char(matchInfo.Moved(iN-1)), '_to_', char(baseName), '.txt'];
+%     
+%     % Update the current RT values
+%     tformMoved2Anchor.R = cell2mat(refinedRT.Orientation(iN,1));
+%     tformMoved2Anchor.T = cell2mat(refinedRT.Location(iN,1))';
+%     
+%     % Write the RT values into the file
+%     WriteRT(tformMoved2Anchor, rtFullName); 
+% end
+% disp('Updated all the R|T values in the rt*_.txt files');
 
 % Outputs
 % =======
-refinedStruct = struct('xyz', xyzRefinedts, 'rt', refinedRT);
-rawStruct = struct('xyz', xyzRaw, 'rt', rtRaw);
+refinedStruct = struct('xyz', xyzRefinedPts, 'rt', refinedRTs);
+rawStruct = struct('xyz', xyzRaw_Global, 'rt', rtRaw_Global2Curr);
 end
 
 %% Input arguments valiating functions
