@@ -19,7 +19,7 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 %   1) Anchor, Moved -- Image names of the anchor and moved image, respectively
 %   2) Matched_Points -- Number of matched points of between two images
 %   3) ICP_RMSE -- the "rmse" value from rigid registration
-%   4) PtsPxls_Anch, PtsPxls_Moved -- Matched pixles info of the anchor and the
+%   4) PtsPxls_Anch, PtsPxls_Moved -- Matched pixels info of the anchor and the
 %   moved image, respectively. And each element of the column is a structure,
 %   which holds the following fields.
 %       a) indxPC -- Px1 vector of indices of matched 3D points of point cloud
@@ -27,7 +27,7 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 %   5) Anchor_ViewID, Moved_ViewID -- View ids of anchor and moved pc for each
 %   pair, respectively.
 %
-% 3. ['rtRaw_Curr2Global', rtRaw_Curr2Global]: (M+1)x3 table
+% 3. rtRaw_Curr2Global: (M+1)x3 table
 %   1) ViewId: View-id of each point cloud
 %   2) Orientation: Rotation matrix corresponding to each view
 %   3) Location: Translation of each view
@@ -40,9 +40,15 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 % 4. ['calibStereo', calibStereo]: Mat-file holding stereo calibration
 % parameters between IR and RGB of the Kinect that was used to collect the data.
 %
+% 5. ['viewCount', viewCount]: Scalar value -- Number of views that will be used
+% w.r.t. the base point cloud
+%
+% 6. ['flagLC', flagLC]: true/false -- This flag will decide whether loop
+% closure is needed to be done or not.
+%
 % OUTPUT(s)
 % =========
-% 1. refinedStruct, rawStruct: These two structs hold the following the refinded
+% 1. refinedStruct, rawStruct: These two structs hold the following the refined
 % and non-refined info, respectively. Each structure has:
 %   1) xyz -- Px3 3D points from all views
 %   2) rt -- Px3 table of transformation matrices for all the views
@@ -55,16 +61,19 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 
 % Validate input arguments -----------------------------------------------------
 p = inputParser;
-p.StructExpand = false;                 % Accept strutcture as one element
+p.StructExpand = false;                 % Accept structure as one element
 
 % Calibration parameters of the Kinect sensors
 defaultCalibStereo = ['~/Dropbox/PhD/Data/Calibration/Calibration_20181114/', ...
     'HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
-defaultRtFalg = true;                   % Assume input RTs are not given by user
+defaultFlagLC = true;       % Use loop closure
+defaultViewCount = inf;     % Use all the views by default
 
 addRequired(p, 'dirStruct', @validateDirStruct);
 addRequired(p, 'matchInfo', @validdateMatchInfo);
-addParameter(p, 'rtRaw_Curr2Global', defaultRtFalg, @validateRtInfo);
+addRequired(p, 'rtRaw_Curr2Global', @validateRtInfo);
+addParameter(p, 'viewCount', defaultViewCount, @(x) isnumeric(x) && x>=2);
+addParameter(p, 'flagLC', defaultFlagLC, @(x) islogical(x));
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 
 p.parse(dirStruct, matchInfo, varargin{:});
@@ -72,11 +81,25 @@ disp(p.Results);
 
 % Store variales into local variables to save typing
 dirName = dirStruct.dirName;
-rtFolderName = dirStruct.rtFolderName;
 plyFolderName = dirStruct.plyFolderName;
 calibStereo = p.Results.calibStereo;
 matchInfo = p.Results.matchInfo;
 rtRaw_Curr2Global = p.Results.rtRaw_Curr2Global;
+viewCount = p.Results.viewCount;
+flagLC = p.Results.flagLC;
+
+% If not all the views are used then don't carry out the loop-closure.
+if isinf(viewCount)
+    disp('Using all the views for BA!');
+else
+    disp(['Using first ', num2str(viewCount), ' view!']);
+    flagLC = false;
+end
+if flagLC == true
+    disp('Loop closure will be carried out!');
+else
+    disp('No loop-closure will be used!');
+end
 
 % Algorithm --------------------------------------------------------------------
 % Create the respective lists that will hold all the 3D and 2D points for all 
@@ -88,6 +111,7 @@ pxlList(1, 1:totalPts) = pointTrack;        % 2D pixel list of pointTrack objs
 numImgPairs = size(matchInfo, 1);           % Total number image pairs
 rtRaw_Global2Curr  = rtRaw_Curr2Global;     % Transformation matrix for each pc
 
+viewID_StartEnd_Indx = zeros(numImgPairs, 3);
 endIndxMatchPts = 0;
 % Go through each pair and read the anchor and moved point clouds. Then create
 % pointTrack object for each pixel and 3D point point pairs from every given
@@ -99,6 +123,9 @@ for iImPrs = 1:numImgPairs
     numMtchPts = matchInfo.Matched_Points(iImPrs, 1);	% Match point count in the pair
     startIndxMatchPts = endIndxMatchPts + 1;
     endIndxMatchPts  = endIndxMatchPts + numMtchPts;
+    % Store the start and end index of each range of points obtained from each
+    % pair
+    viewID_StartEnd_Indx(iImPrs, :) = [iImPrs, startIndxMatchPts, endIndxMatchPts];
     
     % Create pointTrack object for each pixel pair
     % ============================================
@@ -139,6 +166,24 @@ for iImPrs = 1:numImgPairs
 	% Store the matching 3D point
     xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = pcMovedMtcPts_Global;
 end
+% Prune data points if needed
+if viewCount < numImgPairs
+    % If fewer views are required instead of the entire data set then prune the
+    % rest of the 3D points and 2D pixel from participating in BA
+    rtRaw_Global2Curr(viewCount+1:end, :) = [];
+    pxlList(viewID_StartEnd_Indx(viewCount, 2):end) = [];
+    xyzRaw_Global(viewID_StartEnd_Indx(viewCount, 2):end, :) = [];
+elseif flagLC == false
+    % If loop closure is not needed then take out:
+    %   1) direct transformation from the last view to the base.
+    %   2) pixel pairs from last view and base image
+    %   3) 3D points correspoding to the pixel pairs
+    rtRaw_Global2Curr(end,:) = [];
+    pxlList(viewID_StartEnd_Indx(end, 2):end) = [];
+    xyzRaw_Global(viewID_StartEnd_Indx(end, 2):end, :) = [];
+end
+% cameraPoses only takes IDs as uint32
+rtRaw_Global2Curr.ViewId = uint32(rtRaw_Global2Curr.ViewId);
 
 % Load the camera intrinsic parameters and create an object -- Also another
 % WEIRD thing of Matlab for which we have to take the transpose of the intrinsic
@@ -146,9 +191,6 @@ end
 load(calibStereo, 'KK_left', 'KK_right');
 KK_RGB = KK_left;
 camParams = cameraParameters('IntrinsicMatrix', KK_RGB');
-% cameraPoses only takes IDs as uint32
-rtRaw_Global2Curr.ViewId = uint32(rtRaw_Curr2Global.ViewId);
-rtRaw_Global2Curr(end,:) = [];
 
 % Bundle Adjustment
 % =================
@@ -156,14 +198,14 @@ rtRaw_Global2Curr(end,:) = [];
 %   1) points in the global coordinate frame
 %   2) transformation matrix of each view which evaluates the 3D point in
 %   current view given the 3D points in global frame
-%   3) intrinsic parameters of the camera which will transform the the 3D points
+%   3) intrinsic parameters of the camera which will transform the 3D points
 %   in the current view into the image frame
 %
 % In the current scenario, use the R|T's in a table form, intrinsic parameters
 % in the form of "cameraParameters" obj and the 3D points as a Nx3 matrix.
 [xyzRefinedPts,refinedRTs] = bundleAdjustment(xyzRaw_Global, pxlList, ...
     rtRaw_Global2Curr, camParams, 'FixedViewIDs', 1,  'RelativeTolerance', 1e-10,...
-    'MaxIterations', 100, 'PointsUndistorted', true, 'Verbose', true);
+    'MaxIterations', 1000, 'PointsUndistorted', true, 'Verbose', true);
 
 % % Update R|T
 % % ==========
@@ -199,12 +241,12 @@ elseif ~ischar(dirStruct.dirName) && ~ischar(dirStruct.plyFolderName) && ...
         ~ischar(dirStruct.rtFolderName)
     % Then check whether the given fields are consistent with the data type that
     % is required.
-    error(['The fields of the structure should be strings conaining the'...
+    error(['The fields of the structure should be strings containing the'...
         ' name of the folders']);
 elseif ~(exist(dirStruct.dirName, 'dir')==7) || ...
         ~(exist([dirStruct.dirName, '/', dirStruct.plyFolderName], 'dir') == 7)
     % Throw an error showing telling about the missing directory
-    error('The directory does not exist. Check the path onec again.');
+    error('The directory does not exist. Check the path once again.');
 else
     TF = true;
 end
@@ -218,7 +260,7 @@ end
 
 function TF = validdateMatchInfo(matchInfo)
 % This function is going to check whether the input is a table or not. And
-% whether it cotains the columns "Name" and "Matched_Points" columns.
+% whether it contains the columns "Name" and "Matched_Points" columns.
 TF = false;
 if ~istable(matchInfo)
     % Expecting a table
@@ -232,14 +274,14 @@ else
 end
 end
 
-function TF = validateRtInfo(rtRaw)
+function TF = validateRtInfo(rtRaw_Curr2Global)
 % This function is going to test whether the variable is a table or not. Also,
 % it will check the fields of the table too.
 TF = false;
-if ~istable(rtRaw)
+if ~istable(rtRaw_Curr2Global)
     error("Provide a table as an input");
 elseif ~all(ismember({'ViewId', 'Orientation', 'Location'}, ...
-        rtRaw.Properties.VariableNames))
+        rtRaw_Curr2Global.Properties.VariableNames))
     error("Provide required columns");
 else
     TF = true;
