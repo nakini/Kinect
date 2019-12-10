@@ -104,7 +104,7 @@ end
 % Algorithm --------------------------------------------------------------------
 % Create the respective lists that will hold all the 3D and 2D points for all 
 % images.
-totalPts = sum(matchInfo.Matched_Points);   % Total number points from all images
+totalPts = 2*sum(matchInfo.Matched_Points); % Total number points from all images
 xyzRaw_Global = zeros(totalPts, 3);         % 3D point list
 pxlList(1, 1:totalPts) = pointTrack;        % 2D pixel list of pointTrack objs
 
@@ -122,7 +122,7 @@ for iImPrs = 1:numImgPairs
     % pairs.
     numMtchPts = matchInfo.Matched_Points(iImPrs, 1);	% Match point count in the pair
     startIndxMatchPts = endIndxMatchPts + 1;
-    endIndxMatchPts  = endIndxMatchPts + numMtchPts;
+    endIndxMatchPts  = endIndxMatchPts + 2*numMtchPts;
     % Store the start and end index of each range of points obtained from each
     % pair
     viewID_StartEnd_Indx(iImPrs, :) = [iImPrs, startIndxMatchPts, endIndxMatchPts];
@@ -138,21 +138,30 @@ for iImPrs = 1:numImgPairs
         pxlList(1, startIndxMatchPts+iTrk-1) = pointTrack(currViewIDs, ...
             [pxlAnch(iTrk, :); pxlMoved(iTrk, :)]);
     end
+    pxlList(startIndxMatchPts+numMtchPts:endIndxMatchPts) = ...
+        pxlList(startIndxMatchPts:startIndxMatchPts+numMtchPts-1);
     
     % Read and transform point clouds
     % ===============================
     % Names of the point clouds
     anchName = matchInfo.Anchor(iImPrs);                % Anchor pc name
     movedName = matchInfo.Moved(iImPrs);                % Moved pc name
-    tmpPlyName = [dirName, '/', plyFolderName, '/depthImg_'];
-    pcFullNameMoved = [tmpPlyName, char(movedName), '.ply'];
+    tmpPlyNameMoved = [dirName, '/', plyFolderName, '/depthImg_'];
+    pcFullNameAnch = [tmpPlyNameMoved, char(anchName), '.ply'];
+    pcFullNameMoved = [tmpPlyNameMoved, char(movedName), '.ply'];
     
     % Load the pcs, transform them into the GLOBAL coordinate frame and 
     % segregate the matching points from each pair
+    pcAnch = pcread(pcFullNameAnch);
+    R_Anch = rtRaw_Curr2Global.Orientation{iImPrs};
+    T_Anch = rtRaw_Curr2Global.Location{iImPrs}';
+    pcAnch_Global = TransformPointCloud(pcAnch, struct('R', R_Anch, 'T', T_Anch));
+    pcAnchMtcPts_Global = pcAnch_Global.Location(matchInfo.PtsPxls_Anch{iImPrs}.indxPC, :);
+    
     pcMoved = pcread(pcFullNameMoved);
-    R = rtRaw_Curr2Global.Orientation{iImPrs+1};
-    T = rtRaw_Curr2Global.Location{iImPrs+1}';
-    pcMoved_Global = TransformPointCloud(pcMoved, struct('R', R, 'T', T));
+    R_Moved = rtRaw_Curr2Global.Orientation{iImPrs+1};
+    T_Moved = rtRaw_Curr2Global.Location{iImPrs+1}';
+    pcMoved_Global = TransformPointCloud(pcMoved, struct('R', R_Moved, 'T', T_Moved));
     pcMovedMtcPts_Global = pcMoved_Global.Location(matchInfo.PtsPxls_Moved{iImPrs}.indxPC, :);
     
     % Store Structure and Motion
@@ -161,10 +170,11 @@ for iImPrs = 1:numImgPairs
     % inverse of the homogeneous transformation matrix, we should have used
     % inv(R) or R' for rotation, but due to Matlab's weird formats we have to
     % use R.
-    rtRaw_Global2Curr.Orientation{iImPrs+1} = R;        % Expecting R' though
-    rtRaw_Global2Curr.Location{iImPrs+1} = (-R'*T)';
+    rtRaw_Global2Curr.Orientation{iImPrs+1} = R_Moved;        % Expecting R' though
+    rtRaw_Global2Curr.Location{iImPrs+1} = (-R_Moved'*T_Moved)';
 	% Store the matching 3D point
-    xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = pcMovedMtcPts_Global;
+    xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = ...
+        vertcat(pcAnchMtcPts_Global, pcMovedMtcPts_Global);
 end
 % Prune data points if needed
 if viewCount < numImgPairs
