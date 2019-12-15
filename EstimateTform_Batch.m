@@ -44,8 +44,11 @@ function [matchInfo, rtInfo] = EstimateTform_Batch(dirStruct, imgNumStruct, ...
 %
 % 7. ['regRigidStruct', regRigidParams]: Parameters need for carrying out a 
 % rigid registration method on two given point cloud.
-%	1) maxIter -- Maximum number of iteration
-%   2) icpMethod -- This could be pointToPlane | pointToPoint | ndt3D
+%	1) MaxIterations -- Maximum number of iteration
+%   2) Metric -- This could be pointToPlane | pointToPoint
+%
+% 8. ['saveRTFlag', saveRTFlag]: Logical value used to decide whether to store
+% the R|T values into corresponding text files or not.
 %
 % OUTPUT(s)
 % =========
@@ -80,6 +83,11 @@ function [matchInfo, rtInfo] = EstimateTform_Batch(dirStruct, imgNumStruct, ...
 p = inputParser;
 p.StructExpand = false;             % Accept structure as one element
 
+% Compulsory parameters --
+addRequired(p, 'dirStruct', @validateDirStruct);
+addRequired(p, 'imgNumStruct', @validateImgNumStruct);
+
+% Optional parameters --
 % Parameters to be used to match 2 RGB images
 defaultGeomParams = struct('MaxDistance', 3.5);
 % Calibration parameters of the Kinect sensors
@@ -87,20 +95,18 @@ defaultCalibStereo = ['~/Dropbox/PhD/Data/Calibration/Calibration_20181114/', ..
     'HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
 % Display pair of point clouds.
 defaultFlags = struct('matchPair', false, 'pcPair', false);
-% Corner detection technique --
-validCornerOptions = {'SURF', 'Harris', 'UserDefined'};
-defaultCorner = 'SURF';
-validateCorner = @(x) any(validatestring(x, validCornerOptions));
-% Regid registration parameters
-defaultRegRigidParams =  struct('maxIter', 20, 'icpMethod', 'pointToPlane');
+% Accepted corner detection techniques --
+validCornerTechs = {'SURF', 'Harris', 'UserDefined'};
+% Regid registration parameters -- More parameter options are available on
+% pcregistericp()/pcregrigid() help docs.
+defaultRegRigidParams =  struct('MaxIterations', 20, 'Metric', 'pointToPlane');
 
-addRequired(p, 'dirStruct', @validateDirStruct);
-addRequired(p, 'imgNumStruct', @validateImgNumStruct);
 addParameter(p, 'geomParamsStruct', defaultGeomParams, @(x)isstruct(x));
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 addParameter(p, 'dispFlag', defaultFlags, @validateDispFlag);
-addParameter(p, 'cornerTech', defaultCorner, validateCorner);
-addParameter(p, 'regrigidStruct', defaultRegRigidParams, @validateRegRigidParams);
+addParameter(p, 'cornerTech', 'SURF', @(x) any(validatestring(x, validCornerTechs)));
+addParameter(p, 'regrigidStruct', defaultRegRigidParams, @(x) isstruct(x));
+addParameter(p, 'saveRTFlag', false, @(x) islogical(x));
 
 p.parse(dirStruct, imgNumStruct, varargin{:});
 disp('Given inputs for EstimateTform_Batch() function:');
@@ -116,6 +122,7 @@ calibStereo = p.Results.calibStereo;
 dispFlag = p.Results.dispFlag;
 cornerTech = p.Results.cornerTech;
 regrigidStruct = p.Results.regrigidStruct;
+saveRTFlag = p.Results.saveRTFlag;
 % If the sub-folder "Relative" doesn't exist then create to store all the
 % pairwise relative transformation matrices.
 rtSubFolderName = [dirName, '/', rtFolderName, '/Relative'];
@@ -164,10 +171,12 @@ viewIDPairs = zeros(numImgs, 2);    % Hold a pair of view IDs
 rtInfo = cell(numImgs+1, 4);        % Also includes the R|T of 1st image
 rtFromTo = [num2str(fileNumbers(1)), '_to_', num2str(fileNumbers(1))];
 rtInfo(1, :) = {1, eye(3,3), [0, 0, 0], rtFromTo};
-% Also save the same into a file
-rtNameBase = ['rt_', rtFromTo, '.txt'];
-rtFullNameBase = [rtSubFolderName, '/', rtNameBase];
-WriteRT(struct('R', eye(3,3), 'T', zeros(3,1)), rtFullNameBase);
+% Also save the same into a file if needed.
+if saveRTFlag == true
+    rtNameBase = ['rt_', rtFromTo, '.txt'];
+    rtFullNameBase = [rtSubFolderName, '/', rtNameBase];
+    WriteRT(struct('R', eye(3,3), 'T', zeros(3,1)), rtFullNameBase);
+end
 
 % If there is only 1 image then then there is no point in finding the matches.
 if numImgs < 2
@@ -288,14 +297,16 @@ for iNum = 1:numImgs
     % =====================
     LogRegistrationStatus(regStats, pcNameAnch, pcNameMoved, ...
         matchPtsCount(iNum, 1), logFileName);
-    % Save the transformation matrix into a file
-    rtFromTo = [num2str(movedNum), '_to_', num2str(anchNum)];
-    rtNameMoved = ['rt_', rtFromTo, '.txt'];
-    rtFullNameMoved = [rtSubFolderName, '/', rtNameMoved];
-    WriteRT(tformMoved2Anchor, rtFullNameMoved);
+    % Save the transformation matrix into a file if needed
+    if saveRTFlag == true
+        rtFromTo = [num2str(movedNum), '_to_', num2str(anchNum)];
+        rtNameMoved = ['rt_', rtFromTo, '.txt'];
+        rtFullNameMoved = [rtSubFolderName, '/', rtNameMoved];
+        WriteRT(tformMoved2Anchor, rtFullNameMoved);
+    end
+    % Also save the R|T values in a table.
     rtInfo(iNum+1, :) = {movedIndx, tformMoved2Anchor.R, tformMoved2Anchor.T', ...
         rtFromTo};
-
     % If needed display the point cloud
     if dispFlag.pcPair == 1
         DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved, tformMoved2Anchor);
@@ -380,8 +391,16 @@ tformPC2toPC1 = struct('R', R, 'T', T);
 % Run the ICP or similar algorithms to do a final registration and then update 
 % the current transformation matrix. Update the initial transformation field
 % with the current findings and run the rigid ICP.
-paramsRegRigid.initTform = tformPC2toPC1;
-[tformPC2toPC1, ~, rmse] = RunRigidReg(pcStruct1.pc, pcStruct2.pc, paramsRegRigid);
+
+% Build a affine3D object from R and T provided as the initial rotation and
+% translation.
+paramsRegRigid.InitialTransform = ConvertRTtoAffine3D(tformPC2toPC1.R, tformPC2toPC1.T);
+% Register the point clouds
+[tformPC2toPC1, ~, rmse] = pcregrigid(pcStruct2.pc, pcStruct1.pc, paramsRegRigid);
+% Convert the affine3D object into R matrix and T vector and return it as a
+% structure.
+[finalR, finalT] = ConvertAffine3DtoRT(tformPC2toPC1);
+tformPC2toPC1 = struct('R', finalR, 'T', finalT);
 end
 
 %%
@@ -469,22 +488,6 @@ elseif ~islogical(dispFlag.pcPair) || ~islogical(dispFlag.matchPair)
     % Then check whether the given fields are consistent with the data type that
     % is required.
     error('The data types for the fields should be -- true/false');
-else
-    TF = true;
-end
-end
-
-function TF = validateRegRigidParams(regRigidParams)
-if ~all(isfield(regRigidParams, {'maxIter', 'icpMethod'}))
-    % First validate whether the structure contains the required fields or not.
-    error('Provide the fields -- pcPair, matchPair');
-elseif ~isnumeric(regRigidParams.maxIter) || (regRigidParams.maxIter < 0)
-    % Maximum iteration count check
-    error('The maximum iteration count should be a non-negative integer');
-elseif ~any(validatestring(regRigidParams.icpMethod , ...
-        {'pointToPoint', 'pointToPlane', 'ndt3D'}))
-    % Registration method name check
-    error('The registration method should be --- pointToPoint|pointToPlane|ndt3D');
 else
     TF = true;
 end
