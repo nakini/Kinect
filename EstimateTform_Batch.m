@@ -29,8 +29,7 @@ function [matchInfo, rtInfo] = EstimateTform_Batch(dirStruct, imgNumStruct, ...
 % 3. ['geomParamsStruct', geomParamsStruct]: Parameters for matching the two 
 % images and removing outlier in pair of matching points. (For more information,
 % look at the 'estimateGeometricTransform()' help document.
-%   1) tformType -- It could be similarity|affine|projective
-%   2) maxDist -- Maximum distance from point to projection
+%   1) MaxDistance -- Maximum distance from point to projection
 %
 % 4. ['calibStereo', calibStereo]: Mat-file holding stereo calibration parameters 
 % between IR and RGB of the Kinect that was used to collect the data.
@@ -82,7 +81,7 @@ p = inputParser;
 p.StructExpand = false;             % Accept structure as one element
 
 % Parameters to be used to match 2 RGB images
-defaultGeomParams = struct('tformType', 'projective', 'maxDist', 3.5);
+defaultGeomParams = struct('MaxDistance', 3.5);
 % Calibration parameters of the Kinect sensors
 defaultCalibStereo = ['~/Dropbox/PhD/Data/Calibration/Calibration_20181114/', ...
     'HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
@@ -97,14 +96,16 @@ defaultRegRigidParams =  struct('maxIter', 20, 'icpMethod', 'pointToPlane');
 
 addRequired(p, 'dirStruct', @validateDirStruct);
 addRequired(p, 'imgNumStruct', @validateImgNumStruct);
-addParameter(p, 'geomParamsStruct', defaultGeomParams, @validateGeomParams);
+addParameter(p, 'geomParamsStruct', defaultGeomParams, @(x)isstruct(x));
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 addParameter(p, 'dispFlag', defaultFlags, @validateDispFlag);
 addParameter(p, 'cornerTech', defaultCorner, validateCorner);
 addParameter(p, 'regrigidStruct', defaultRegRigidParams, @validateRegRigidParams);
 
 p.parse(dirStruct, imgNumStruct, varargin{:});
+disp('Given inputs for EstimateTform_Batch() function:');
 disp(p.Results);
+fprintf('\n');
 
 % Store variables into local variables to save typing :-p
 dirName = dirStruct.dirName;
@@ -230,7 +231,8 @@ for iNum = 1:numImgs
     rgbNameMoved = ['rgbImg_', num2str(movedNum), '.jpg'];
     imgName{iNum, 1} = num2str(anchNum);    % Store the names
     imgName{iNum, 2} = num2str(movedNum);
-    fprintf('Matching -- %s and %s\n\n', rgbNameAnch, rgbNameMoved);
+    fprintf('Matching -- %s and %s\n', rgbNameAnch, rgbNameMoved);
+    fprintf('========\n');
     
     % Match two RGB images
     % ====================
@@ -255,7 +257,8 @@ for iNum = 1:numImgs
     matchingStruct = struct('technique', cornerTech, 'points1', points2DAnch , ...
         'points2', points2DMoved);
     [inlierPtsAnch, inlierPtsMoved] = FindMatched2DPixels(rgbImgAnch, ...
-        rgbImgMoved, matchingStruct, geomParamsStruct, dispFlag.matchPair);
+        rgbImgMoved, 'matchingParams', matchingStruct, 'geomEstParams', ...
+        geomParamsStruct, 'dispFlag', dispFlag.matchPair);
     
     % Match corresponding Point Clouds
     % ================================
@@ -395,7 +398,7 @@ else
         pcNameMoved, '. Number of matching points -- "', ...
         num2str(matchPtsCount), '"\n']);
 end
-disp(statusStr);
+fprintf(sprintf('%s%s', statusStr, '\n'));
 LogInfo(logFileName, statusStr);
 end
 
@@ -412,7 +415,6 @@ end
 
 %% Input arguments validating functions
 function TF = validateDirStruct(dirStruct)
-TF = false;
 % First validate whether the structure contains the required fields or not.
 if ~all(isfield(dirStruct, {'dirName', 'plyFolderName', 'rtFolderName'}))
     error('Provied the proper fields : dirName, plyFolderName and rtFolderName');
@@ -438,7 +440,6 @@ end
 end
 
 function TF = validateImgNumStruct(imgNumStruct)
-TF = false;
 % First validate whether the structure contains the required fields or not.
 if ~all(isfield(imgNumStruct, {'startIndx', 'endIndx'}))
     error('The start and end index of the file number should be given');
@@ -451,32 +452,16 @@ else
 end
 end
 
-function TF = validateGeomParams(geomParamsStruct)
-TF = false;
-% First validate whether the structure contains the required fields or not.
-if ~all(isfield(geomParamsStruct, {'tformType', 'maxDist'}))
-    error('Provide the fields -- tformType, maxDist');
-elseif ~ischar(geomParamsStruct.tformType) || ~isnumeric(geomParamsStruct.maxDist)
-    % Then check whether the given fields are consistent with the data type that
-    % is required.
-    error('Provide proper data types for the structure');
-else
-    TF = true;
-end
-end
-
 function TF = validateCalibStereo(calibStereo)
-TF = false;
 % Is it a existing matfile or no
 if exist(calibStereo, 'file') == 2
     TF = true;
 else
-     error('It should be a valid mat-file');
+    error('It should be a valid mat-file');
 end
 end
 
 function TF = validateDispFlag(dispFlag)
-TF = false;
 if ~all(isfield(dispFlag, {'pcPair', 'matchPair'}))
     % First validate whether the structure contains the required fields or not.
     error('Provide the fields -- pcPair, matchPair');

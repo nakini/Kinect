@@ -243,7 +243,6 @@ end
 
 %% Input arguments valiating functions
 function TF = validateDirStruct(dirStruct)
-TF = false;
 % First validate whether the structure contains the required fields or not.
 if ~all(isfield(dirStruct, {'dirName', 'plyFolderName', 'rtFolderName'}))
     error('Provied the proper fields : dirName, plyFolderName and rtFolderName');
@@ -299,7 +298,6 @@ end
 end
 
 function TF = validateCalibStereo(calibStereo)
-TF = false;
 % Is it a existing matfile or no
 if exist(calibStereo, 'file') == 2
     TF = true;
