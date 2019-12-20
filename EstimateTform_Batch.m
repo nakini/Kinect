@@ -11,6 +11,10 @@ function [matchInfo, rtInfo] = EstimateTform_Batch(dirStruct, imgNumStruct, ...
 % or 2) Project the 3D points onto the RGB image and use them as the feature
 % points.
 %
+% As far as the pairs are concerned, I will take all possible pairs. For
+% example, given "n" images, we are going to get nC2 number of pairs in total.
+% And for each pair, matching will be evaluated.
+%
 % INPUT(s)
 % ========
 % 1. dirStruct: Directory structure containing the RGB/Depth images and the
@@ -56,7 +60,7 @@ function [matchInfo, rtInfo] = EstimateTform_Batch(dirStruct, imgNumStruct, ...
 %   1) Anchor, Moved -- Image names of the anchor and moved image, respectively
 %   2) Matched_Points -- Number of matched points of between two images
 %   3) ICP_RMSE -- the "rmse" value from rigid registration
-%   4) PtsPxls_Anch, PtsPxls_Moved -- Matched pixles info of the anchor and the
+%   4) PtsPxls_Anch, PtsPxls_Moved -- Matched pixels info of the anchor and the
 %   moved image, respectively. And each element of the column is a structure,
 %   which holds the following fields.
 %       a) indxPC -- Px1 vector of indices of matched 3D points of point cloud
@@ -152,25 +156,24 @@ while imgNumStruct.startIndx < imgNumStruct.endIndx
     end
     imgNumStruct.startIndx = imgNumStruct.startIndx + 1;   % Check the next one
 end
-fileList{imgIndx} = fileList{1};	% Add the 1st to the end of the list
-fileNumbers(imgIndx) = fileNumbers(1);
-
-numImgs = length(fileList)-1;       % Total number of images
-matchPtsCount = zeros(numImgs, 1);  % Store matching points
-regRigidError = zeros(numImgs, 1);  % Hold the error from ICP algorithm
-imgName = cell(numImgs, 2);         % Name of matching image pair
-matchPtsPxls = cell(numImgs, 2);    % Holds pair of structures
+numImgs = length(fileList);             % Total number of images
+imgPairList = nchoosek(fileNumbers, 2); % All possible image pair combinations
+numPairs = size(imgPairList, 1);        % Total number of combinations
+matchPtsCount = zeros(numPairs, 1);     % Store matching points
+regRigidError = zeros(numPairs, 1);     % Hold the error from ICP algorithm
+imgName = cell(numPairs, 2);            % Name of matching image pair
+matchPtsPxls = cell(numPairs, 2);       % Holds pair of structures
 % For Bundle adjustment, we also need the view-ids which is nothing but a
 % sequential view number.
-viewIDList = 1:numImgs+1;
-viewIDList(end) = 1;                % Last ID is 1 for the loop closure.
-viewIDPairs = zeros(numImgs, 2);    % Hold a pair of view IDs
+viewIDPairs = zeros(numPairs, 2);       % Hold a pair of view IDs
+regPairStatus = zeros(numPairs,1);      % Keep track of FAILED/SUCCEEDED pairs
 
 % Store R and T along with the view index. Also set the default values for the
-% 1st image/pc.
-rtInfo = cell(numImgs+1, 4);        % Also includes the R|T of 1st image
+% base image/pc. This will make the variable 1 row larger than the one that hold
+% information for the matching pairs.
+rtInfo = cell(numPairs+1, 4);           % Also includes the R|T of 1st image
 rtFromTo = [num2str(fileNumbers(1)), '_to_', num2str(fileNumbers(1))];
-rtInfo(1, :) = {1, eye(3,3), [0, 0, 0], rtFromTo};
+rtInfo(1, :) = {fileNumbers(1), eye(3,3), [0, 0, 0], rtFromTo};
 % Also save the same into a file if needed.
 if saveRTFlag == true
     rtNameBase = ['rt_', rtFromTo, '.txt'];
@@ -195,29 +198,24 @@ tformDepth2RGB = TformMatFromCalibration(calibStereo);
 % ========================
 % File name that is going to store all the log information.
 logFileName = [dirName, '/', rtFolderName, '/Log-', date, '.txt'];
-logString = string(['Processings started at: ', datestr(datetime), '\n']);
+logString = string(['Processing started at: ', datestr(datetime), '\n']);
 LogInfo(logFileName, logString);
 
 % Load a pair of images at a time and find the correspondence. The first image
 % will be the anchor image and the 2nd will be the moved point cloud
-for iNum = 1:numImgs
-    % For the last image pair, make the last+1 (which is in fact the 1st images)
-    % as the anchor image
-    if iNum == numImgs              % Only for the LAST pair
-        anchIndx = iNum+1;
-        movedIndx = iNum;
-    else                            % For the rest of the pairs
-        anchIndx = iNum;
-        movedIndx = iNum + 1;
-    end
-    % Save the view-id
-    viewIDPairs(iNum, :) = [viewIDList(anchIndx), viewIDList(movedIndx)];
+for iIP = 1:numPairs
+	anchNum = imgPairList(iIP, 1);
+    movedNum = imgPairList(iIP, 2);
+    % Save the view-id -- The view ids will the actual number cropped from image
+    % name. %%%TODO: If the bundle adjust need sequential numbering scheme then
+    % I need to update it.%%%
+    viewIDPairs(iIP, :) = [anchNum, movedNum];
     
     % Read the 1st RGB image & PC
     % ===========================
     % Here, we are also going to read corresponding rt*.txt file if exists. If
     % not we are going to crate one.
-    anchNum = fileNumbers(anchIndx);
+    anchIndx = fileNumbers == anchNum;
     rgbFullNameAnch = fileList{anchIndx};
     rgbImgAnch = imread(rgbFullNameAnch);   % Read 1st image
     % Read teh 2st point cloud corresponding to the RGB image
@@ -227,7 +225,7 @@ for iNum = 1:numImgs
     
     % Read the 2nd RGB image & PC
     % ===========================
-    movedNum = fileNumbers(movedIndx);
+    movedIndx = fileNumbers == movedNum;
     % Read the 2nd point cloud
     rgbFullNameMoved = fileList{movedIndx};
     rgbImgMoved = imread(rgbFullNameMoved); % Read 2nd image
@@ -238,8 +236,8 @@ for iNum = 1:numImgs
     % Display the image names that were supposed to be matched
     rgbNameAnch = ['rgbImg_', num2str(anchNum), '.jpg'];
     rgbNameMoved = ['rgbImg_', num2str(movedNum), '.jpg'];
-    imgName{iNum, 1} = num2str(anchNum);    % Store the names
-    imgName{iNum, 2} = num2str(movedNum);
+    imgName{iIP, 1} = num2str(anchNum);    % Store the names
+    imgName{iIP, 2} = num2str(movedNum);
     fprintf('Matching -- %s and %s\n', rgbNameAnch, rgbNameMoved);
     fprintf('========\n');
     
@@ -279,8 +277,8 @@ for iNum = 1:numImgs
         'tformDepth2RGB', tformDepth2RGB);
     [mtchAnchStct, mtchMovedStct] = FindMatched3DPoints(pcStructAnch, ...
         pcStructMoved);
-    matchPtsCount(iNum, 1) = size(mtchAnchStct.indxPC, 1);
-    matchPtsPxls(iNum, :) = {mtchAnchStct, mtchMovedStct};
+    matchPtsCount(iIP, 1) = size(mtchAnchStct.indxPC, 1);
+    matchPtsPxls(iIP, :) = {mtchAnchStct, mtchMovedStct};
     
     % Find the transformation
     % =======================
@@ -291,12 +289,17 @@ for iNum = 1:numImgs
     pcStructMoved = struct('pc', pcMoved, 'matchIndx', mtchMovedStct.indxPC);
     [tformMoved2Anchor, rmse, regStats] = FindTransformationPC2toPC1(pcStructAnch, ...
         pcStructMoved, regrigidStruct);
-    regRigidError(iNum, 1) = rmse;
+    regRigidError(iIP, 1) = rmse;
+    if regStats
+        regPairStatus(iIP, 1) = 1;
+    else
+        regPairStatus(iIP, 1) = 0;
+    end
     
     % Log, Save and Display
     % =====================
     LogRegistrationStatus(regStats, pcNameAnch, pcNameMoved, ...
-        matchPtsCount(iNum, 1), logFileName);
+        matchPtsCount(iIP, 1), logFileName);
     % Save the transformation matrix into a file if needed
     rtFromTo = [num2str(movedNum), '_to_', num2str(anchNum)];
     if saveRTFlag == true
@@ -304,6 +307,7 @@ for iNum = 1:numImgs
         rtFullNameMoved = [rtSubFolderName, '/', rtNameMoved];
         WriteRT(tformMoved2Anchor, rtFullNameMoved);
     end
+
     % Also save the R|T values in a table -- All the CV toolbox functions use
     % the "Transpose" of the matrices and vectors, such that:
     %       [x y z] = [X Y Z]*R' + t'
@@ -315,10 +319,30 @@ for iNum = 1:numImgs
         DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved, tformMoved2Anchor);
     end
 end
-
+% Log the outcome
+% ===============
 % Store the total number of files processed status
-logString = string(['\nPair of files processed in total: ', num2str(iNum), '\n\n']);
+numSucceededPairs = numel(regPairStatus(regPairStatus == 1));
+logString = string(['\nOut of ', num2str(iIP), ' pairs of files, ', ...
+    num2str(numSucceededPairs), ' succeeded and ', ...
+    num2str(numPairs - numSucceededPairs), ' failed.', '\n\n']);
 LogInfo(logFileName, logString);
+
+% Prune the failed attempts
+% =========================
+% We are goint to get rid of all the pairs that have failed to match with each
+% other as there are fewer corresponding points that the threshold count which
+% is 5 in my case.
+regPairStatus = logical(regPairStatus);
+imgName = imgName(regPairStatus, :);
+matchPtsCount = matchPtsCount(regPairStatus, :);
+regRigidError = regRigidError(regPairStatus, :);
+matchPtsPxls = matchPtsPxls(regPairStatus, :);
+viewIDPairs = viewIDPairs(regPairStatus, :);
+% As "rtInfo" will also be holding the transformation from base to base, we have
+% make sure add "1" to indices that needed to be removed.
+regPairStatus = [true; regPairStatus];
+rtInfo = rtInfo(regPairStatus, :);
 
 % Outputs
 % =======
