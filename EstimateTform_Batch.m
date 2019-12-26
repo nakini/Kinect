@@ -298,14 +298,17 @@ for iNum = 1:numImgs
     LogRegistrationStatus(regStats, pcNameAnch, pcNameMoved, ...
         matchPtsCount(iNum, 1), logFileName);
     % Save the transformation matrix into a file if needed
+    rtFromTo = [num2str(movedNum), '_to_', num2str(anchNum)];
     if saveRTFlag == true
-        rtFromTo = [num2str(movedNum), '_to_', num2str(anchNum)];
         rtNameMoved = ['rt_', rtFromTo, '.txt'];
         rtFullNameMoved = [rtSubFolderName, '/', rtNameMoved];
         WriteRT(tformMoved2Anchor, rtFullNameMoved);
     end
-    % Also save the R|T values in a table.
-    rtInfo(iNum+1, :) = {movedIndx, tformMoved2Anchor.R, tformMoved2Anchor.T', ...
+    % Also save the R|T values in a table -- All the CV toolbox functions use
+    % the "Transpose" of the matrices and vectors, such that:
+    %       [x y z] = [X Y Z]*R' + t'
+    % where, R is a 3x3 matrix and t is a 3x1 vector.
+    rtInfo(iNum+1, :) = {movedIndx, tformMoved2Anchor.R', tformMoved2Anchor.T', ...
         rtFromTo};
     % If needed display the point cloud
     if dispFlag.pcPair == 1

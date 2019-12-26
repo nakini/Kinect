@@ -153,25 +153,22 @@ for iImPrs = 1:numImgPairs
     % Load the pcs, transform them into the GLOBAL coordinate frame and 
     % segregate the matching points from each pair
     pcAnch = pcread(pcFullNameAnch);
-    R_Anch = rtRaw_Curr2Global.Orientation{iImPrs};
+    R_Anch = rtRaw_Curr2Global.Orientation{iImPrs}';
     T_Anch = rtRaw_Curr2Global.Location{iImPrs}';
     pcAnch_Global = TransformPointCloud(pcAnch, struct('R', R_Anch, 'T', T_Anch));
     pcAnchMtcPts_Global = pcAnch_Global.Location(matchInfo.PtsPxls_Anch{iImPrs}.indxPC, :);
     
     pcMoved = pcread(pcFullNameMoved);
-    R_Moved = rtRaw_Curr2Global.Orientation{iImPrs+1};
+    R_Moved = rtRaw_Curr2Global.Orientation{iImPrs+1}';
     T_Moved = rtRaw_Curr2Global.Location{iImPrs+1}';
     pcMoved_Global = TransformPointCloud(pcMoved, struct('R', R_Moved, 'T', T_Moved));
     pcMovedMtcPts_Global = pcMoved_Global.Location(matchInfo.PtsPxls_Moved{iImPrs}.indxPC, :);
     
     % Store Structure and Motion
     % ==========================
-    % Store global to current view transformation matrices. As we are taking the
-    % inverse of the homogeneous transformation matrix, we should have used
-    % inv(R) or R' for rotation, but due to Matlab's weird formats we have to
-    % use R.
-    rtRaw_Global2Curr.Orientation{iImPrs+1} = R_Moved;        % Expecting R' though
-    rtRaw_Global2Curr.Location{iImPrs+1} = (-R_Moved'*T_Moved)';
+    % The bundleAdjustment() function takes the 3D points in the global
+    % coordinate frame and the transformation of each camera is from "Current
+    % Camera view -- to -- Global view" which we already have.
 	% Store the matching 3D point
     xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = ...
         vertcat(pcAnchMtcPts_Global, pcMovedMtcPts_Global);
@@ -180,7 +177,7 @@ end
 if viewCount < numImgPairs
     % If fewer views are required instead of the entire data set then prune the
     % rest of the 3D points and 2D pixel from participating in BA
-    rtRaw_Global2Curr(viewCount+1:end, :) = [];
+    rtRaw_Curr2Global(viewCount+1:end, :) = [];
     pxlList(viewID_StartEnd_Indx(viewCount, 2):end) = [];
     xyzRaw_Global(viewID_StartEnd_Indx(viewCount, 2):end, :) = [];
 elseif flagLC == false
@@ -188,12 +185,12 @@ elseif flagLC == false
     %   1) direct transformation from the last view to the base.
     %   2) pixel pairs from last view and base image
     %   3) 3D points correspoding to the pixel pairs
-    rtRaw_Global2Curr(end,:) = [];
+    rtRaw_Curr2Global(end,:) = [];
     pxlList(viewID_StartEnd_Indx(end, 2):end) = [];
     xyzRaw_Global(viewID_StartEnd_Indx(end, 2):end, :) = [];
 end
 % cameraPoses only takes IDs as uint32
-rtRaw_Global2Curr.ViewId = uint32(rtRaw_Global2Curr.ViewId);
+rtRaw_Curr2Global.ViewId = uint32(rtRaw_Curr2Global.ViewId);
 
 % Load the camera intrinsic parameters and create an object -- Also another
 % WEIRD thing of Matlab for which we have to take the transpose of the intrinsic
@@ -214,7 +211,7 @@ camParams = cameraParameters('IntrinsicMatrix', KK_RGB');
 % In the current scenario, use the R|T's in a table form, intrinsic parameters
 % in the form of "cameraParameters" obj and the 3D points as a Nx3 matrix.
 [xyzRefinedPts,refinedRTs] = bundleAdjustment(xyzRaw_Global, pxlList, ...
-    rtRaw_Global2Curr, camParams, 'FixedViewIDs', 1,  'RelativeTolerance', 1e-10,...
+    rtRaw_Curr2Global, camParams, 'FixedViewIDs', 1,  'RelativeTolerance', 1e-10,...
     'MaxIterations', 1000, 'PointsUndistorted', true, 'Verbose', true);
 
 % % Update R|T
