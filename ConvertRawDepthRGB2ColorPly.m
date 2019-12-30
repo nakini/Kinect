@@ -115,7 +115,7 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
             % Create as strucutre that will hold R matrix and T vector only.
             tformDepth2RGB.R = inv(R);
             % Convert into Centimeters as the PC is in centimeters
-            tformDepth2RGB.T = -inv(R)*T/10;
+            tformDepth2RGB.T = -inv(R)*T/1000;
             tformDepth2RGB.KK_RGB = KK_left;
             tformDepth2RGB.KK_IR = KK_right;
             
