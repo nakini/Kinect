@@ -1,5 +1,5 @@
 function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh, ...
-    flyPixCorrTh)
+    flyPixCorrTh, fixFlyPixFlag)
 % Get-rid-of flying pixels using the "window" method. Flying pixel is a inherent
 % problem with the ToF sensors. There are another 2 methods based on the normal
 % at each pixel. However, it is concluded by the authors that the window method
@@ -22,6 +22,9 @@ function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh, ..
 
 %^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 %------------------------------- START -----------------------------------------
+if nargin < 5
+    fixFlyPixFlag = false;
+end
 if nargin < 4
     flyPixCorrTh = flyDistTh + 0.01;
 end
@@ -55,8 +58,7 @@ indxInvalidSurfels = (distMat >= flyDistTh) & (distMat < flyPixCorrTh) ;
 disp(['Number of flying pixel: ', num2str(nnz(indxInvalidSurfels))]);
 windowLength = 2*flyWinSize+1;
 correctedSurfelCount = 0;
-fixFlyingPixels = true;
-if fixFlyingPixels == true
+if fixFlyPixFlag == true
     for r=flyWinSize+1:maxR-flyWinSize
         for c=flyWinSize+1:maxC-flyWinSize
             % Place the window on each pixel and look for a valid surface pixel
