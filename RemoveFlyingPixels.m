@@ -1,4 +1,4 @@
-function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh) 
+function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh)
 % Get-rid-of flying pixels using the "window" method. Flying pixel is a inherent
 % problem with the ToF sensors. There are another 2 methods based on the normal
 % at each pixel. However, it is concluded by the authors that the window method
@@ -8,7 +8,7 @@ function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh)
 % INPUT(s):
 %   data3D      : Structure containing X, Y and Z values for each pixel
 %   flyWinSize  : Window size, usually 1 or 2
-%   flyWinTh    : Flot values such as 0.08, 0.1, etc.
+%   flyWinTh    : Float values such as 0.08, 0.1, etc.
 %
 % OUTPUT(s):
 %   indxSurfels : Valid indices
@@ -21,6 +21,7 @@ function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh)
 %------------------------------- START -----------------------------------------
 [maxR, maxC] = size(data.x3D);          % Image matrix size
 distMat = zeros(maxR, maxC);            % Matrix for dist values
+distMatFlySurfels = distMat;            % Will hold the corrected flying pixels
 
 % Find the sum of the distances in the bounding box for each pixel.
 for r=flyWinSize+1:maxR-flyWinSize
@@ -37,44 +38,56 @@ for r=flyWinSize+1:maxR-flyWinSize
     end
 end
 % Set the threshold to remove all the flying pixels.
-indxSurfels = (distMat > 0) & (distMat < flyDistTh);
+indxValidSurfels = (distMat > 0) & (distMat < flyDistTh);
+
+disp("Total number of pixel: " + nnz(distMat));
+disp("Number of pixel below threshold: " + nnz(indxValidSurfels));
 
 % Go through the entire image once again to correct few of the pixels which are
 % close to any valid surface.
-indxInvalidSurfels = distMat > flyDistTh;
-windowLength = 2*flyWinSize*+1;
-for r=flyWinSize+1:maxR-flyWinSize
-    for c=flyWinSize+1:maxC-flyWinSize
-        if indxInvalidSurfels(y,x) == 1
-            % Move the window on each pixel and find if there is any nearby
-            % surface pixel.
-            tmpIndxMat = zeros(windowLength * windowLength, 1);
-            tmpValueMat = tmpIndxMat;
-            tmpZ = tmpIndxMat;
-            tmpCount = 1;
-            for y=r-flyWinSize:1:r+flyWinSize
-                for x=c-flyWinSize:1:c+flyWinSize
-                    tmpIndxMat(tmpCount, 1) = indxSurfels(y,x);
-                    tmpValueMat(tmpCount, 1) = distMat(y,x);
-                    tmpZ(tmpCount, 1) = data.z3D(y,x);
-                    tmpCount = tmpCount + 1;
+indxInvalidSurfels = distMat >= flyDistTh;
+disp(['Number of flying pixel: ', num2str(nnz(indxInvalidSurfels))]);
+windowLength = 2*flyWinSize+1;
+correctedSurfelCount = 0;
+fixFlyingPixels = true;
+if fixFlyingPixels == true
+    for r=flyWinSize+1:maxR-flyWinSize
+        for c=flyWinSize+1:maxC-flyWinSize
+            % Place the window on each pixel and look for a valid surface pixel
+            % inside that window. If there is a valid pixel then update the
+            % current one with the smallest valid pixel.
+            if indxInvalidSurfels(r,c) == 1
+                tmpIndxMat = zeros(windowLength^2, 1);
+                tmpValueMat = tmpIndxMat;     	% Hold the indices
+                tmpZ = tmpIndxMat;              % Hold corresponding Z values
+                elementIndx = 1;
+                for y=r-flyWinSize:1:r+flyWinSize
+                    for x=c-flyWinSize:1:c+flyWinSize
+                        tmpIndxMat(elementIndx, 1) = indxValidSurfels(y,x);
+                        tmpValueMat(elementIndx, 1) = distMat(y,x);
+                        tmpZ(elementIndx, 1) = data.z3D(y,x);
+                        elementIndx = elementIndx + 1;
+                    end
                 end
+                
+                % If there is a valid nearby surface pixel then update the
+                % current one with the nearest surface pixel.
+                nonZeroElements = nnz(tmpIndxMat);
+                if nonZeroElements ~= 0
+                    [distMatFlySurfels(r,c), indxMin] = min(tmpValueMat);
+                    data.z3D(r,c) = tmpZ(indxMin);
+                    correctedSurfelCount = correctedSurfelCount + 1;
+                end
+            else
+                continue;
             end
-            
-            % If there is a valid nearby surface pixel then update the current
-            % one with the nearest surface pixel.
-            nonZeroElements = nnz(tmpIndxMat);
-            if nonZeroElements ~= 0
-                [distMat(r,c), indxMin] = min(tmpValueMat);
-                data.z3D(r,c) = tmpZ(indxMin);
-            end
-        else
-            continue;
         end
-        
     end
 end
 
 % Once again find all the indices and updated Z values.
-indxSurfels = (distMat > 0) & (distMat < flyDistTh);
+indxCorrectedSurfels = distMatFlySurfels ~= 0;
+indxSurfels = indxValidSurfels | indxCorrectedSurfels;
 z3D = data.z3D;
+
+disp("Total number of corrected pixels: " + correctedSurfelCount + newline);
