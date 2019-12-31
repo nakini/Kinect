@@ -1,4 +1,5 @@
-function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh)
+function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh, ...
+    flyPixCorrTh)
 % Get-rid-of flying pixels using the "window" method. Flying pixel is a inherent
 % problem with the ToF sensors. There are another 2 methods based on the normal
 % at each pixel. However, it is concluded by the authors that the window method
@@ -9,6 +10,8 @@ function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh)
 %   data3D      : Structure containing X, Y and Z values for each pixel
 %   flyWinSize  : Window size, usually 1 or 2
 %   flyWinTh    : Float values such as 0.08, 0.1, etc.
+%   flyPixCorrTh: Flying pixel correction threshold. It should be greater than
+%       flyWinTh value.
 %
 % OUTPUT(s):
 %   indxSurfels : Valid indices
@@ -19,6 +22,9 @@ function [indxSurfels, z3D] = RemoveFlyingPixels(data, flyWinSize, flyDistTh)
 
 %^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 %------------------------------- START -----------------------------------------
+if nargin < 4
+    flyPixCorrTh = flyDistTh + 0.01;
+end
 [maxR, maxC] = size(data.x3D);          % Image matrix size
 distMat = zeros(maxR, maxC);            % Matrix for dist values
 distMatFlySurfels = distMat;            % Will hold the corrected flying pixels
@@ -45,7 +51,7 @@ disp("Number of pixel below threshold: " + nnz(indxValidSurfels));
 
 % Go through the entire image once again to correct few of the pixels which are
 % close to any valid surface.
-indxInvalidSurfels = distMat >= flyDistTh;
+indxInvalidSurfels = (distMat >= flyDistTh) & (distMat < flyPixCorrTh) ;
 disp(['Number of flying pixel: ', num2str(nnz(indxInvalidSurfels))]);
 windowLength = 2*flyWinSize+1;
 correctedSurfelCount = 0;
