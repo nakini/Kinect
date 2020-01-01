@@ -1,5 +1,5 @@
-function [matchInfo, rtInfo] = EstimateTform_Batch(dirStruct, imgNumStruct, ...
-    varargin)
+function [matchInfo, rtInfo, matIncidence] = EstimateTform_Batch(dirStruct, ...
+    imgNumStruct, varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
 % matched pixels I will figure out the corresponding 3D points for each RGB
@@ -72,6 +72,9 @@ function [matchInfo, rtInfo] = EstimateTform_Batch(dirStruct, imgNumStruct, ...
 %   1) ViewID -- View number (1 through number of images)
 %   2) Orientation -- Rotation matrix w.r.t anchor/pc
 %   3) Translation -- Translation vector w.r.t. anchor image/pc
+%
+% 3. matIncidence: MxM table, it is an incidence matrix which will store 1 for
+% the successful matched pairs.
 %
 % Example(s)
 % ==========
@@ -167,10 +170,20 @@ matchPtsPxls = cell(numPairs, 2);       % Holds pair of structures
 % sequential view number.
 viewIDPairs = zeros(numPairs, 2);       % Hold a pair of view IDs
 regPairStatus = zeros(numPairs,1);      % Keep track of FAILED/SUCCEEDED pairs
-
 % Store R, T, the view index, and "from-to" name. For the 1st images we always
 % assume the the rotation is identity matrix and the translation is zero-vector.
 rtInfo = cell(numPairs, 4);
+% Incidence matrix of a graph to hold all the successful pair-wise connections.
+% The row and column name of the table will be the image names. And, as this is
+% an undirected graph, it will an symmetric matrix. Also, keep in mind that the
+% 'VariableNames' should strar with a 'character'.
+rcNames = string(num2cell(fileNumbers)).cellstr; % Needed a cell of strings
+rNames = "From_" + rcNames;
+rNames = rNames.cellstr;
+cNames = "To_" + rcNames;
+cNames = cNames.cellstr;
+matIncidence = array2table(zeros(numImgs, numImgs), 'VariableNames', cNames, ...
+    'RowNames', rNames);
 
 % If there is only 1 image then then there is no point in finding the matches.
 if numImgs < 2
@@ -283,6 +296,9 @@ for iIP = 1:numPairs
     regRigidError(iIP, 1) = rmse;
     if regStats
         regPairStatus(iIP, 1) = 1;
+        % Symmetric incidence matrix
+        matIncidence(['From_', num2str(anchNum)], ['To_', num2str(movedNum)]) = {1};
+        matIncidence(['From_', num2str(movedNum)], ['To_', num2str(anchNum)]) = {1};
     else
         regPairStatus(iIP, 1) = 0;
     end
