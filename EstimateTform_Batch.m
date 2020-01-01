@@ -168,18 +168,9 @@ matchPtsPxls = cell(numPairs, 2);       % Holds pair of structures
 viewIDPairs = zeros(numPairs, 2);       % Hold a pair of view IDs
 regPairStatus = zeros(numPairs,1);      % Keep track of FAILED/SUCCEEDED pairs
 
-% Store R and T along with the view index. Also set the default values for the
-% base image/pc. This will make the variable 1 row larger than the one that hold
-% information for the matching pairs.
-rtInfo = cell(numPairs+1, 4);           % Also includes the R|T of 1st image
-rtFromTo = [num2str(fileNumbers(1)), '_to_', num2str(fileNumbers(1))];
-rtInfo(1, :) = {fileNumbers(1), eye(3,3), [0, 0, 0], rtFromTo};
-% Also save the same into a file if needed.
-if saveRTFlag == true
-    rtNameBase = ['rt_', rtFromTo, '.txt'];
-    rtFullNameBase = [rtSubFolderName, '/', rtNameBase];
-    WriteRT(struct('R', eye(3,3), 'T', zeros(3,1)), rtFullNameBase);
-end
+% Store R, T, the view index, and "from-to" name. For the 1st images we always
+% assume the the rotation is identity matrix and the translation is zero-vector.
+rtInfo = cell(numPairs, 4);
 
 % If there is only 1 image then then there is no point in finding the matches.
 if numImgs < 2
@@ -312,8 +303,7 @@ for iIP = 1:numPairs
     % the "Transpose" of the matrices and vectors, such that:
     %       [x y z] = [X Y Z]*R' + t'
     % where, R is a 3x3 matrix and t is a 3x1 vector.
-    rtInfo(iNum+1, :) = {movedIndx, tformMoved2Anchor.R', tformMoved2Anchor.T', ...
-        rtFromTo};
+    rtInfo(iIP, :) = {anchNum, tformMoved2Anchor.R', tformMoved2Anchor.T', rtFromTo};
     % If needed display the point cloud
     if dispFlag.pcPair == 1
         DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved, tformMoved2Anchor);
@@ -339,9 +329,6 @@ matchPtsCount = matchPtsCount(regPairStatus, :);
 regRigidError = regRigidError(regPairStatus, :);
 matchPtsPxls = matchPtsPxls(regPairStatus, :);
 viewIDPairs = viewIDPairs(regPairStatus, :);
-% As "rtInfo" will also be holding the transformation from base to base, we have
-% make sure add "1" to indices that needed to be removed.
-regPairStatus = [true; regPairStatus];
 rtInfo = rtInfo(regPairStatus, :);
 
 % Outputs
@@ -355,7 +342,7 @@ matchInfo = table(imgName(:,1), imgName(:,2), matchPtsCount, regRigidError, ...
 
 % Create a table for R|T
 rtInfo = table(cell2mat(rtInfo(:,1)), rtInfo(:,2), rtInfo(:,3), rtInfo(:,4), ...
-    'VariableNames', {'ViewId', 'Orientation', 'Location', 'Moved_To_Anchor'});
+    'VariableNames', {'Anchor_Num', 'Orientation', 'Location', 'Moved_To_Anchor'});
 end
 
 %%
