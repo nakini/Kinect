@@ -170,20 +170,19 @@ matchPtsPxls = cell(numPairs, 2);       % Holds pair of structures
 % sequential view number.
 viewIDPairs = zeros(numPairs, 2);       % Hold a pair of view IDs
 regPairStatus = zeros(numPairs,1);      % Keep track of FAILED/SUCCEEDED pairs
-% Store R, T, the view index, and "from-to" name. For the 1st images we always
-% assume the the rotation is identity matrix and the translation is zero-vector.
-rtInfo = cell(numPairs, 4);
+% Store Anch-num, Moved-num, R, T, and "from-to" name. For the 1st images we
+% always assume the the rotation is identity matrix and the translation is zero-
+% vector.
+rtInfo = cell(numPairs, 5);
 % Incidence matrix of a graph to hold all the successful pair-wise connections.
 % The row and column name of the table will be the image names. And, as this is
 % an undirected graph, it will an symmetric matrix. Also, keep in mind that the
 % 'VariableNames' should strar with a 'character'.
 rcNames = string(num2cell(fileNumbers)).cellstr; % Needed a cell of strings
-rNames = "From_" + rcNames;
-rNames = rNames.cellstr;
 cNames = "To_" + rcNames;
 cNames = cNames.cellstr;
 matIncidence = array2table(zeros(numImgs, numImgs), 'VariableNames', cNames, ...
-    'RowNames', rNames);
+    'RowNames', rcNames);
 
 % If there is only 1 image then then there is no point in finding the matches.
 if numImgs < 2
@@ -296,9 +295,9 @@ for iIP = 1:numPairs
     regRigidError(iIP, 1) = rmse;
     if regStats
         regPairStatus(iIP, 1) = 1;
-        % Symmetric incidence matrix
-        matIncidence(['From_', num2str(anchNum)], ['To_', num2str(movedNum)]) = {1};
-        matIncidence(['From_', num2str(movedNum)], ['To_', num2str(anchNum)]) = {1};
+        % Incidence matrix of a directed graph -- As the transformation is from
+        % moved-to-anchor, but not the other way around.
+        matIncidence(num2str(movedNum), ['To_', num2str(anchNum)]) = {1};
     else
         regPairStatus(iIP, 1) = 0;
     end
@@ -319,12 +318,14 @@ for iIP = 1:numPairs
     % the "Transpose" of the matrices and vectors, such that:
     %       [x y z] = [X Y Z]*R' + t'
     % where, R is a 3x3 matrix and t is a 3x1 vector.
-    rtInfo(iIP, :) = {anchNum, tformMoved2Anchor.R', tformMoved2Anchor.T', rtFromTo};
+    rtInfo(iIP, :) = {anchNum, movedNum, tformMoved2Anchor.R', ...
+        tformMoved2Anchor.T', rtFromTo};
     % If needed display the point cloud
     if dispFlag.pcPair == 1
         DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved, tformMoved2Anchor);
     end
 end
+
 % Log the outcome
 % ===============
 % Store the total number of files processed status
@@ -336,7 +337,7 @@ LogInfo(logFileName, logString);
 
 % Prune the failed attempts
 % =========================
-% We are goint to get rid of all the pairs that have failed to match with each
+% We are going to get rid of all the pairs that have failed to match with each
 % other as there are fewer corresponding points that the threshold count which
 % is 5 in my case.
 regPairStatus = logical(regPairStatus);
@@ -357,8 +358,9 @@ matchInfo = table(imgName(:,1), imgName(:,2), matchPtsCount, regRigidError, ...
      'PtsPxls_Anch', 'PtsPxls_Moved', 'Anchor_ViewID', 'Moved_ViewID'});
 
 % Create a table for R|T
-rtInfo = table(cell2mat(rtInfo(:,1)), rtInfo(:,2), rtInfo(:,3), rtInfo(:,4), ...
-    'VariableNames', {'Anchor_Num', 'Orientation', 'Location', 'Moved_To_Anchor'});
+rtInfo = table(cell2mat(rtInfo(:,1)), cell2mat(rtInfo(:,2)), rtInfo(:,3), ...
+    rtInfo(:,4), rtInfo(:,5), 'VariableNames', {'Anchor_Num', 'Moved_Num', ...
+    'Orientation', 'Location', 'Moved_To_Anchor'});
 end
 
 %%
