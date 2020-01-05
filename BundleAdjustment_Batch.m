@@ -1,5 +1,5 @@
 function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
-    matchInfo, varargin)
+    matchPairWise, rtRaw_Curr2Global, varargin)
 % In this function, I am going to read all the point clouds along with the RGB
 % images and the pair wise matching pixels and carry out the bundle adjustment
 % to optimize the transformation parameters and the 3D points. This includes the
@@ -15,7 +15,7 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 %	3) rtFolderName -- Name of the folder relative to 'dirName' holding all the
 %	text files which contain the R|T information.
 %
-% 2. matchInfo: Mx8 table
+% 2. matchPairWise: Mx8 table
 %   1) Anchor, Moved -- Image names of the anchor and moved image, respectively
 %   2) Matched_Points -- Number of matched points of between two images
 %   3) ICP_RMSE -- the "rmse" value from rigid registration
@@ -63,6 +63,7 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 p = inputParser;
 p.StructExpand = false;                 % Accept structure as one element
 
+% Compulsory parameters --
 % Calibration parameters of the Kinect sensors
 defaultCalibStereo = ['~/Dropbox/PhD/Data/Calibration/Calibration_20181114/', ...
     'HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
@@ -70,20 +71,22 @@ defaultFlagLC = true;       % Use loop closure
 defaultViewCount = inf;     % Use all the views by default
 
 addRequired(p, 'dirStruct', @validateDirStruct);
-addRequired(p, 'matchInfo', @validdateMatchInfo);
+addRequired(p, 'matchPairWise', @validdateMatchPairWise);
 addRequired(p, 'rtRaw_Curr2Global', @validateRtInfo);
+
+% Optional Parameters --
 addParameter(p, 'viewCount', defaultViewCount, @(x) isnumeric(x) && x>=2);
 addParameter(p, 'flagLC', defaultFlagLC, @(x) islogical(x));
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 
-p.parse(dirStruct, matchInfo, varargin{:});
+p.parse(dirStruct, matchPairWise, rtRaw_Curr2Global, varargin{:});
 disp(p.Results);
 
 % Store variales into local variables to save typing
 dirName = dirStruct.dirName;
 plyFolderName = dirStruct.plyFolderName;
 calibStereo = p.Results.calibStereo;
-matchInfo = p.Results.matchInfo;
+matchPairWise = p.Results.matchPairWise;
 rtRaw_Curr2Global = p.Results.rtRaw_Curr2Global;
 viewCount = p.Results.viewCount;
 flagLC = p.Results.flagLC;
@@ -104,12 +107,11 @@ end
 % Algorithm --------------------------------------------------------------------
 % Create the respective lists that will hold all the 3D and 2D points for all 
 % images.
-totalPts = 2*sum(matchInfo.Matched_Points); % Total number points from all images
-xyzRaw_Global = zeros(totalPts, 3);         % 3D point list
-pxlList(1, 1:totalPts) = pointTrack;        % 2D pixel list of pointTrack objs
+totalPts = sum(matchPairWise.Matched_Points);   % Total number points from all images
+xyzRaw_Global = zeros(totalPts, 3);             % 3D point list
+pxlList(1, 1:totalPts) = pointTrack;            % 2D pixel list of pointTrack objs
 
-numImgPairs = size(matchInfo, 1);           % Total number image pairs
-rtRaw_Global2Curr  = rtRaw_Curr2Global;     % Transformation matrix for each pc
+numImgPairs = size(matchPairWise, 1);           % Total number image pairs
 
 viewID_StartEnd_Indx = zeros(numImgPairs, 3);
 endIndxMatchPts = 0;
@@ -120,7 +122,7 @@ for iImPrs = 1:numImgPairs
     % Following two variable act like pointer to starting and end index to keep
     % track of matching points for each pair in the long-list of whole matching
     % pairs.
-    numMtchPts = matchInfo.Matched_Points(iImPrs, 1);	% Match point count in the pair
+    numMtchPts = matchPairWise.Matched_Points(iImPrs, 1);   % Match point count in the pair
     startIndxMatchPts = endIndxMatchPts + 1;
     endIndxMatchPts  = endIndxMatchPts + 2*numMtchPts;
     % Store the start and end index of each range of points obtained from each
@@ -131,9 +133,10 @@ for iImPrs = 1:numImgPairs
     % ============================================
     % Save the 2D pixel points into a pointTrack class -- It takes the multiple
     % pixels from multiple views and the view-ids and creates an object.
-    pxlAnch = matchInfo.PtsPxls_Anch{iImPrs}.pixelsRGB;
-    pxlMoved = matchInfo.PtsPxls_Moved{iImPrs}.pixelsRGB;
-    currViewIDs = [matchInfo.Anchor_ViewID(iImPrs), matchInfo.Moved_ViewID(iImPrs)];
+    pxlAnch = matchPairWise.PtsPxls_Anch{iImPrs}.pixelsRGB;
+    pxlMoved = matchPairWise.PtsPxls_Moved{iImPrs}.pixelsRGB;
+    currViewIDs = [matchPairWise.Anchor_ViewID(iImPrs), ...
+        matchPairWise.Moved_ViewID(iImPrs)];
     for iTrk = 1:numMtchPts
         pxlList(1, startIndxMatchPts+iTrk-1) = pointTrack(currViewIDs, ...
             [pxlAnch(iTrk, :); pxlMoved(iTrk, :)]);
@@ -144,8 +147,8 @@ for iImPrs = 1:numImgPairs
     % Read and transform point clouds
     % ===============================
     % Names of the point clouds
-    anchName = matchInfo.Anchor(iImPrs);                % Anchor pc name
-    movedName = matchInfo.Moved(iImPrs);                % Moved pc name
+    anchName = matchPairWise.Anchor(iImPrs);                % Anchor pc name
+    movedName = matchPairWise.Moved(iImPrs);                % Moved pc name
     tmpPlyNameMoved = [dirName, '/', plyFolderName, '/depthImg_'];
     pcFullNameAnch = [tmpPlyNameMoved, char(anchName), '.ply'];
     pcFullNameMoved = [tmpPlyNameMoved, char(movedName), '.ply'];
@@ -156,20 +159,22 @@ for iImPrs = 1:numImgPairs
     R_Anch = rtRaw_Curr2Global.Orientation{iImPrs}';
     T_Anch = rtRaw_Curr2Global.Location{iImPrs}';
     pcAnch_Global = TransformPointCloud(pcAnch, struct('R', R_Anch, 'T', T_Anch));
-    pcAnchMtcPts_Global = pcAnch_Global.Location(matchInfo.PtsPxls_Anch{iImPrs}.indxPC, :);
+    validMatchIndx = matchPairWise.PtsPxls_Anch{iImPrs}.indxPC;
+    pcAnchMtcPts_Global = pcAnch_Global.Location(validMatchIndx, :);
     
     pcMoved = pcread(pcFullNameMoved);
     R_Moved = rtRaw_Curr2Global.Orientation{iImPrs+1}';
     T_Moved = rtRaw_Curr2Global.Location{iImPrs+1}';
     pcMoved_Global = TransformPointCloud(pcMoved, struct('R', R_Moved, 'T', T_Moved));
-    pcMovedMtcPts_Global = pcMoved_Global.Location(matchInfo.PtsPxls_Moved{iImPrs}.indxPC, :);
+    validMatchIndx = matchPairWise.PtsPxls_Moved{iImPrs}.indxPC;
+    pcMovedMtcPts_Global = pcMoved_Global.Location(validMatchIndx, :);
     
     % Store Structure and Motion
     % ==========================
     % The bundleAdjustment() function takes the 3D points in the global
     % coordinate frame and the transformation of each camera is from "Current
-    % Camera view -- to -- Global view" which we already have.
-	% Store the matching 3D point
+    % Camera view -- to -- Global view" which we already have. So, we just need
+    % to store the matching 3D point.
     xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = ...
         vertcat(pcAnchMtcPts_Global, pcMovedMtcPts_Global);
 end
@@ -214,28 +219,10 @@ camParams = cameraParameters('IntrinsicMatrix', KK_RGB');
     rtRaw_Curr2Global, camParams, 'FixedViewIDs', 1,  'RelativeTolerance', 1e-10,...
     'MaxIterations', 1000, 'PointsUndistorted', true, 'Verbose', true);
 
-% % Update R|T
-% % ==========
-% % Go through all the rt_*.txt files and update it with the current finding of
-% % bundle adjustments.
-% for iN = 2:numImgPairs+1
-%     % Create a file name for RT
-%     rtFullName = [dirName, '/', rtFolderName, '/Absolute/rt_',  ...
-%         char(matchInfo.Moved(iN-1)), '_to_', char(baseName), '.txt'];
-%     
-%     % Update the current RT values
-%     tformMoved2Anchor.R = cell2mat(refinedRT.Orientation(iN,1));
-%     tformMoved2Anchor.T = cell2mat(refinedRT.Location(iN,1))';
-%     
-%     % Write the RT values into the file
-%     WriteRT(tformMoved2Anchor, rtFullName); 
-% end
-% disp('Updated all the R|T values in the rt*_.txt files');
-
 % Outputs
 % =======
 refinedStruct = struct('xyz', xyzRefinedPts, 'rt', refinedRTs);
-rawStruct = struct('xyz', xyzRaw_Global, 'rt', rtRaw_Global2Curr);
+rawStruct = struct('xyz', xyzRaw_Global, 'rt', rtRaw_Curr2Global);
 end
 
 %% Input arguments valiating functions
