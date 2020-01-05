@@ -1,4 +1,4 @@
-function rtRawCurr2Base  = ComputeAbsoluteRTs(rtInfo, matIncidence, dispGraphFlag)
+function rtRawCurr2Base  = ComputeAbsoluteRTs(rtInfo, matIncidence, varargin)
 % Here, we are going to read the pair wise transformation matrices which
 % transforms the "moved" pc back to the "anchor", and find out absolute
 % transformation to the "base" pc by appending subsequent transformation
@@ -32,6 +32,26 @@ function rtRawCurr2Base  = ComputeAbsoluteRTs(rtInfo, matIncidence, dispGraphFla
 %-------------------------------------------------------------------------------
 %------------------------------- START -----------------------------------------
 
+% Validate input arguments -----------------------------------------------------
+p = inputParser;
+p.StructExpand = false;             % Accept structure as one element
+
+% Compulsory parameters --
+addRequired(p, 'rtInfo', @validateRTInfo);
+addRequired(p, 'matIncidence', @(x) istable(x));
+
+% Optional parameters --
+addParameter(p, 'dispGraphFlag', 'true', @(x) islogical(x));
+
+p.parse(rtInfo, matIncidence, varargin{:});
+disp('Given inputs for EstimateTform_Batch() function:');
+disp(p.Results);
+fprintf('\n');
+
+% Store variables into local variables to save typing :-p
+dispGraphFlag = p.Results.dispGraphFlag;
+
+% Algorithm --------------------------------------------------------------------
 % Data Arrangement
 % ================
 % Get all the file numbers and the incidence matrix -- The file names will be
@@ -121,16 +141,18 @@ end
 % Create a table for R|T
 rtRawCurr2Base = table(allViewIds, allPairs_R, allPairs_T, ...
     'VariableNames', {'ViewId', 'Orientation', 'Location'});
+end
 
-
-
-
-
-
-
-
-
-
-
-
-
+%% Input arguments validating functions
+function TF = validateRTInfo(rtInfo)
+% Check whether the input is a table or not. If it is a table then check whether
+% it has the column names consistent with the required names.
+if ~istable(rtInfo)
+    error('Provide information in the form of a table');
+elseif ~all(ismember(["Anchor_Num", "Moved_Num", "Location", "Orientation"], ...
+        rtInfo.Properties.VariableNames))
+    error('The table should contain Anchor_Num|Moved_Num|Location|Orientation');
+else
+    TF = true;
+end
+end
