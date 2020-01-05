@@ -1,5 +1,5 @@
-function [matchInfo, rtInfo, matIncidence] = EstimateTform_Batch(dirStruct, ...
-    imgNumStruct, varargin)
+function [matchPairWise, rtPairWise, matIncidence] = EstimateTform_Batch(...
+    dirStruct, imgNumStruct, varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
 % matched pixels I will figure out the corresponding 3D points for each RGB
@@ -56,7 +56,7 @@ function [matchInfo, rtInfo, matIncidence] = EstimateTform_Batch(dirStruct, ...
 %
 % OUTPUT(s)
 % =========
-% 1. matchInfo: Mx8 table
+% 1. matchPairWise: Mx8 table
 %   1) Anchor, Moved -- Image names of the anchor and moved image, respectively
 %   2) Matched_Points -- Number of matched points of between two images
 %   3) ICP_RMSE -- the "rmse" value from rigid registration
@@ -68,7 +68,7 @@ function [matchInfo, rtInfo, matIncidence] = EstimateTform_Batch(dirStruct, ...
 %   5) Anchor_ViewID, Moved_ViewID -- View ids of anchor and moved pc for each
 %   pair, respectively.
 %
-% 2. rtInfo: Mx3 table
+% 2. rtPairWise: Mx3 table
 %   1) ViewID -- View number (1 through number of images)
 %   2) Orientation -- Rotation matrix w.r.t anchor/pc
 %   3) Translation -- Translation vector w.r.t. anchor image/pc
@@ -169,11 +169,11 @@ matchPtsPxls = cell(numPairs, 2);       % Holds pair of structures
 % For Bundle adjustment, we also need the view-ids which is nothing but a
 % sequential view number.
 viewIDPairs = zeros(numPairs, 2);       % Hold a pair of view IDs
-regPairStatus = zeros(numPairs,1);      % Keep track of FAILED/SUCCEEDED pairs
+regPairStatus = false(numPairs,1);      % Keep track of FAILED/SUCCEEDED pairs
 % Store Anch-num, Moved-num, R, T, and "from-to" name. For the 1st images we
 % always assume the the rotation is identity matrix and the translation is zero-
 % vector.
-rtInfo = cell(numPairs, 5);
+rtPairWise = cell(numPairs, 5);
 % Incidence matrix of a graph to hold all the successful pair-wise connections.
 % The row and column name of the table will be the image names. And, as this is
 % an undirected graph, it will an symmetric matrix. Also, keep in mind that the
@@ -294,12 +294,12 @@ for iIP = 1:numPairs
         pcStructMoved, regrigidStruct);
     regRigidError(iIP, 1) = rmse;
     if regStats
-        regPairStatus(iIP, 1) = 1;
+        regPairStatus(iIP, 1) = true;
         % Incidence matrix of a directed graph -- As the transformation is from
         % moved-to-anchor, but not the other way around.
         matIncidence(num2str(movedNum), ['To_', num2str(anchNum)]) = {1};
     else
-        regPairStatus(iIP, 1) = 0;
+        regPairStatus(iIP, 1) = false;
     end
     
     % Log, Save and Display
@@ -318,7 +318,7 @@ for iIP = 1:numPairs
     % the "Transpose" of the matrices and vectors, such that:
     %       [x y z] = [X Y Z]*R' + t'
     % where, R is a 3x3 matrix and t is a 3x1 vector.
-    rtInfo(iIP, :) = {anchNum, movedNum, tformMoved2Anchor.R', ...
+    rtPairWise(iIP, :) = {anchNum, movedNum, tformMoved2Anchor.R', ...
         tformMoved2Anchor.T', rtFromTo};
     % If needed display the point cloud
     if dispFlag.pcPair == 1
@@ -329,7 +329,7 @@ end
 % Log the outcome
 % ===============
 % Store the total number of files processed status
-numSucceededPairs = numel(regPairStatus(regPairStatus == 1));
+numSucceededPairs = nnz(regPairStatus);         % Count number of successful pairs
 logString = string(['\nOut of ', num2str(iIP), ' pairs of files, ', ...
     num2str(numSucceededPairs), ' succeeded and ', ...
     num2str(numPairs - numSucceededPairs), ' failed.', '\n\n']);
@@ -340,26 +340,25 @@ LogInfo(logFileName, logString);
 % We are going to get rid of all the pairs that have failed to match with each
 % other as there are fewer corresponding points that the threshold count which
 % is 5 in my case.
-regPairStatus = logical(regPairStatus);
 imgName = imgName(regPairStatus, :);
 matchPtsCount = matchPtsCount(regPairStatus, :);
 regRigidError = regRigidError(regPairStatus, :);
 matchPtsPxls = matchPtsPxls(regPairStatus, :);
 viewIDPairs = viewIDPairs(regPairStatus, :);
-rtInfo = rtInfo(regPairStatus, :);
+rtPairWise = rtPairWise(regPairStatus, :);
 
 % Outputs
 % =======
 % Create a table out of "matched point count" and "rmse" along with names and
 % the matching pixels of anchor and moved pc
-matchInfo = table(imgName(:,1), imgName(:,2), matchPtsCount, regRigidError, ...
+matchPairWise = table(imgName(:,1), imgName(:,2), matchPtsCount, regRigidError, ...
      matchPtsPxls(:,1), matchPtsPxls(:,2), viewIDPairs(:,1), viewIDPairs(:, 2), ...
      'VariableNames', {'Anchor', 'Moved', 'Matched_Points', 'ICP_RMSE', ...
      'PtsPxls_Anch', 'PtsPxls_Moved', 'Anchor_ViewID', 'Moved_ViewID'});
 
 % Create a table for R|T
-rtInfo = table(cell2mat(rtInfo(:,1)), cell2mat(rtInfo(:,2)), rtInfo(:,3), ...
-    rtInfo(:,4), rtInfo(:,5), 'VariableNames', {'Anchor_Num', 'Moved_Num', ...
+rtPairWise = table(cell2mat(rtPairWise(:,1)), cell2mat(rtPairWise(:,2)), rtPairWise(:,3), ...
+    rtPairWise(:,4), rtPairWise(:,5), 'VariableNames', {'Anchor_Num', 'Moved_Num', ...
     'Orientation', 'Location', 'Moved_To_Anchor'});
 end
 
