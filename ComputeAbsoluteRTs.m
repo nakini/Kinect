@@ -1,4 +1,4 @@
-function rtRawCurr2Base  = ComputeAbsoluteRTs(rtInfo, matIncidence, varargin)
+function rtRawCurr2Base  = ComputeAbsoluteRTs(rtPairWise, matIncidence, varargin)
 % Here, we are going to read the pair wise transformation matrices which
 % transforms the "moved" pc back to the "anchor", and find out absolute
 % transformation to the "base" pc by appending subsequent transformation
@@ -9,7 +9,7 @@ function rtRawCurr2Base  = ComputeAbsoluteRTs(rtInfo, matIncidence, varargin)
 %
 % INPUT(s)
 % ========
-% 1. rtInfo: Mx5 table, contains the R|T values along with view numbers
+% 1. rtPairWise: Mx5 table, contains the R|T values along with view numbers
 %   1) Anchor_Num, Moved_Num -- Number of the anchor and moved image, respectively
 %   2) Orientation -- Rotation matrix from moved-to-anchor
 %   3) Location -- Translation vector from moved-to-anchor
@@ -37,13 +37,13 @@ p = inputParser;
 p.StructExpand = false;             % Accept structure as one element
 
 % Compulsory parameters --
-addRequired(p, 'rtInfo', @validateRTInfo);
+addRequired(p, 'rtPairWise', @validateRTPairWise);
 addRequired(p, 'matIncidence', @(x) istable(x));
 
 % Optional parameters --
 addParameter(p, 'dispGraphFlag', 'true', @(x) islogical(x));
 
-p.parse(rtInfo, matIncidence, varargin{:});
+p.parse(rtPairWise, matIncidence, varargin{:});
 disp('Given inputs for EstimateTform_Batch() function:');
 disp(p.Results);
 fprintf('\n');
@@ -65,8 +65,8 @@ end
 
 % The following two will be used to find the index of the the transformation
 % matrix from "moved-view" to "anchor-view".
-movedNums = rtInfo.Moved_Num;
-anchNums = rtInfo.Anchor_Num;
+movedNums = rtPairWise.Moved_Num;
+anchNums = rtPairWise.Anchor_Num;
 
 % All Possible Paths
 % ==================
@@ -92,7 +92,7 @@ end
 
 allViewIds = zeros(allPathsCount, 1);
 allPairs_R = cell(allPathsCount, 1);
-allPairs_T = zeros(allPathsCount, 3);
+allPairs_T = cell(allPathsCount, 1);
 
 % Transformation for each Path
 % ============================
@@ -119,14 +119,14 @@ for iView = 1:length(allPaths_AllViews)
             indxCurrView = indxAnch & indxMoved;
             % Keep updating the transformation matrix as we keep appending the
             % intermediate hops.
-            rtMoved = struct('R', rtInfo.Orientation{indxCurrView}', 'T', ...
-                rtInfo.Location{indxCurrView}');
+            rtMoved = struct('R', rtPairWise.Orientation{indxCurrView}', 'T', ...
+                rtPairWise.Location{indxCurrView}');
             tmpRTCurr2Base = AppendRTs(tmpRTCurr2Base, rtMoved);
         end
         
         % Transformation from current-view to the base
         allPairs_R{indxAllVids, 1} = tmpRTCurr2Base.R';
-        allPairs_T(indxAllVids, :) = tmpRTCurr2Base.T';
+        allPairs_T{indxAllVids, 1} = tmpRTCurr2Base.T';
         
         % 1st number is the 'current-view'
         allViewIds(indxAllVids, 1) = fileNumbers(currPathVect(1));
@@ -141,10 +141,12 @@ end
 % Create a table for R|T
 rtRawCurr2Base = table(allViewIds, allPairs_R, allPairs_T, ...
     'VariableNames', {'ViewId', 'Orientation', 'Location'});
+% Also add the base-to-base view-id, orientation, and location.
+rtRawCurr2Base = [{fileNumbers(1), eye(3,3), zeros(1,3)}; rtRawCurr2Base];
 end
 
 %% Input arguments validating functions
-function TF = validateRTInfo(rtInfo)
+function TF = validateRTPairWise(rtInfo)
 % Check whether the input is a table or not. If it is a table then check whether
 % it has the column names consistent with the required names.
 if ~istable(rtInfo)
