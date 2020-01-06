@@ -1,5 +1,5 @@
 function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
-    matchPairWise, rtRaw_Curr2Global, varargin)
+    matchPairWise, rtRawCurr2Global, varargin)
 % In this function, I am going to read all the point clouds along with the RGB
 % images and the pair wise matching pixels and carry out the bundle adjustment
 % to optimize the transformation parameters and the 3D points. This includes the
@@ -27,7 +27,7 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 %   5) Anchor_ViewID, Moved_ViewID -- View ids of anchor and moved pc for each
 %   pair, respectively.
 %
-% 3. rtRaw_Curr2Global: (M+1)x3 table
+% 3. rtRawCurr2Global: Px3 table
 %   1) ViewId: View-id of each point cloud
 %   2) Orientation: Rotation matrix corresponding to each view
 %   3) Location: Translation of each view
@@ -39,12 +39,6 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 %
 % 4. ['calibStereo', calibStereo]: Mat-file holding stereo calibration
 % parameters between IR and RGB of the Kinect that was used to collect the data.
-%
-% 5. ['viewCount', viewCount]: Scalar value -- Number of views that will be used
-% w.r.t. the base point cloud
-%
-% 6. ['flagLC', flagLC]: true/false -- This flag will decide whether loop
-% closure is needed to be done or not.
 %
 % OUTPUT(s)
 % =========
@@ -65,21 +59,16 @@ p.StructExpand = false;                 % Accept structure as one element
 
 % Compulsory parameters --
 % Calibration parameters of the Kinect sensors
-defaultCalibStereo = ['~/Dropbox/PhD/Data/Calibration/Calibration_20181114/', ...
-    'HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
-defaultFlagLC = true;       % Use loop closure
-defaultViewCount = inf;     % Use all the views by default
-
 addRequired(p, 'dirStruct', @validateDirStruct);
 addRequired(p, 'matchPairWise', @validdateMatchPairWise);
-addRequired(p, 'rtRaw_Curr2Global', @validateRtInfo);
+addRequired(p, 'rtRawCurr2Global', @validateRTCurr2Global);
 
 % Optional Parameters --
-addParameter(p, 'viewCount', defaultViewCount, @(x) isnumeric(x) && x>=2);
-addParameter(p, 'flagLC', defaultFlagLC, @(x) islogical(x));
+defaultCalibStereo = ['~/Dropbox/PhD/Data/Calibration/Calibration_20181114/', ...
+    'HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 
-p.parse(dirStruct, matchPairWise, rtRaw_Curr2Global, varargin{:});
+p.parse(dirStruct, matchPairWise, rtRawCurr2Global, varargin{:});
 disp(p.Results);
 
 % Store variales into local variables to save typing
@@ -87,27 +76,12 @@ dirName = dirStruct.dirName;
 plyFolderName = dirStruct.plyFolderName;
 calibStereo = p.Results.calibStereo;
 matchPairWise = p.Results.matchPairWise;
-rtRaw_Curr2Global = p.Results.rtRaw_Curr2Global;
-viewCount = p.Results.viewCount;
-flagLC = p.Results.flagLC;
-
-% If not all the views are used then don't carry out the loop-closure.
-if isinf(viewCount)
-    disp('Using all the views for BA!');
-else
-    disp(['Using first ', num2str(viewCount), ' view!']);
-    flagLC = false;
-end
-if flagLC == true
-    disp('Loop closure will be carried out!');
-else
-    disp('No loop-closure will be used!');
-end
+rtRawCurr2Global = p.Results.rtRawCurr2Global;
 
 % Algorithm --------------------------------------------------------------------
 % Create the respective lists that will hold all the 3D and 2D points for all 
 % images.
-totalPts = sum(matchPairWise.Matched_Points);   % Total number points from all images
+totalPts = 2*sum(matchPairWise.Matched_Points); % Total number points from all images
 xyzRaw_Global = zeros(totalPts, 3);             % 3D point list
 pxlList(1, 1:totalPts) = pointTrack;            % 2D pixel list of pointTrack objs
 
@@ -141,30 +115,39 @@ for iImPrs = 1:numImgPairs
         pxlList(1, startIndxMatchPts+iTrk-1) = pointTrack(currViewIDs, ...
             [pxlAnch(iTrk, :); pxlMoved(iTrk, :)]);
     end
+    % As we are including both the "moved" and "acnhor" point clouds, we need
+    % the corresponding pixels too. However, the pixels are the same for both
+    % the point clouds. So, we need to append "the same" pixels once again.
     pxlList(startIndxMatchPts+numMtchPts:endIndxMatchPts) = ...
         pxlList(startIndxMatchPts:startIndxMatchPts+numMtchPts-1);
     
     % Read and transform point clouds
     % ===============================
     % Names of the point clouds
-    anchName = matchPairWise.Anchor(iImPrs);                % Anchor pc name
-    movedName = matchPairWise.Moved(iImPrs);                % Moved pc name
+    anchName = matchPairWise.Anchor{iImPrs};                % Anchor pc name
+    movedName = matchPairWise.Moved{iImPrs};                % Moved pc name
     tmpPlyNameMoved = [dirName, '/', plyFolderName, '/depthImg_'];
-    pcFullNameAnch = [tmpPlyNameMoved, char(anchName), '.ply'];
-    pcFullNameMoved = [tmpPlyNameMoved, char(movedName), '.ply'];
+    pcFullNameAnch = [tmpPlyNameMoved, anchName, '.ply'];
+    pcFullNameMoved = [tmpPlyNameMoved, movedName, '.ply'];
     
     % Load the pcs, transform them into the GLOBAL coordinate frame and 
     % segregate the matching points from each pair
     pcAnch = pcread(pcFullNameAnch);
-    R_Anch = rtRaw_Curr2Global.Orientation{iImPrs}';
-    T_Anch = rtRaw_Curr2Global.Location{iImPrs}';
+    anchR_indx = rtRawCurr2Global.ViewId == str2num(anchName);
+    tmpR = rtRawCurr2Global.Orientation(anchR_indx, :);
+    tmpT = rtRawCurr2Global.Location(anchR_indx, :);
+    R_Anch = tmpR{1}';              % There could be many R|T for a view, choose 1st
+    T_Anch = tmpT{1}';
     pcAnch_Global = TransformPointCloud(pcAnch, struct('R', R_Anch, 'T', T_Anch));
     validMatchIndx = matchPairWise.PtsPxls_Anch{iImPrs}.indxPC;
     pcAnchMtcPts_Global = pcAnch_Global.Location(validMatchIndx, :);
     
     pcMoved = pcread(pcFullNameMoved);
-    R_Moved = rtRaw_Curr2Global.Orientation{iImPrs+1}';
-    T_Moved = rtRaw_Curr2Global.Location{iImPrs+1}';
+    movedR_indx = rtRawCurr2Global.ViewId == str2num(movedName);
+    tmpR = rtRawCurr2Global.Orientation(movedR_indx, :);
+    tmpT = rtRawCurr2Global.Location(movedR_indx, :);
+    R_Moved = tmpR{1}';              % There could be many R|T for a view, choose 1st
+    T_Moved = tmpT{1}';
     pcMoved_Global = TransformPointCloud(pcMoved, struct('R', R_Moved, 'T', T_Moved));
     validMatchIndx = matchPairWise.PtsPxls_Moved{iImPrs}.indxPC;
     pcMovedMtcPts_Global = pcMoved_Global.Location(validMatchIndx, :);
@@ -178,24 +161,9 @@ for iImPrs = 1:numImgPairs
     xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = ...
         vertcat(pcAnchMtcPts_Global, pcMovedMtcPts_Global);
 end
-% Prune data points if needed
-if viewCount < numImgPairs
-    % If fewer views are required instead of the entire data set then prune the
-    % rest of the 3D points and 2D pixel from participating in BA
-    rtRaw_Curr2Global(viewCount+1:end, :) = [];
-    pxlList(viewID_StartEnd_Indx(viewCount, 2):end) = [];
-    xyzRaw_Global(viewID_StartEnd_Indx(viewCount, 2):end, :) = [];
-elseif flagLC == false
-    % If loop closure is not needed then take out:
-    %   1) direct transformation from the last view to the base.
-    %   2) pixel pairs from last view and base image
-    %   3) 3D points correspoding to the pixel pairs
-    rtRaw_Curr2Global(end,:) = [];
-    pxlList(viewID_StartEnd_Indx(end, 2):end) = [];
-    xyzRaw_Global(viewID_StartEnd_Indx(end, 2):end, :) = [];
-end
+
 % cameraPoses only takes IDs as uint32
-rtRaw_Curr2Global.ViewId = uint32(rtRaw_Curr2Global.ViewId);
+rtRawCurr2Global.ViewId = uint32(rtRawCurr2Global.ViewId);
 
 % Load the camera intrinsic parameters and create an object -- Also another
 % WEIRD thing of Matlab for which we have to take the transpose of the intrinsic
@@ -216,13 +184,13 @@ camParams = cameraParameters('IntrinsicMatrix', KK_RGB');
 % In the current scenario, use the R|T's in a table form, intrinsic parameters
 % in the form of "cameraParameters" obj and the 3D points as a Nx3 matrix.
 [xyzRefinedPts,refinedRTs] = bundleAdjustment(xyzRaw_Global, pxlList, ...
-    rtRaw_Curr2Global, camParams, 'FixedViewIDs', 1,  'RelativeTolerance', 1e-10,...
+    rtRawCurr2Global, camParams, 'FixedViewIDs', 1,  'RelativeTolerance', 1e-10,...
     'MaxIterations', 1000, 'PointsUndistorted', true, 'Verbose', true);
 
 % Outputs
 % =======
 refinedStruct = struct('xyz', xyzRefinedPts, 'rt', refinedRTs);
-rawStruct = struct('xyz', xyzRaw_Global, 'rt', rtRaw_Curr2Global);
+rawStruct = struct('xyz', xyzRaw_Global, 'rt', rtRawCurr2Global);
 end
 
 %% Input arguments valiating functions
@@ -251,7 +219,7 @@ if ~(exist([dirStruct.dirName, '/', dirStruct.rtFolderName], 'dir') == 7)
 end
 end
 
-function TF = validdateMatchInfo(matchInfo)
+function TF = validdateMatchPairWise(matchInfo)
 % This function is going to check whether the input is a table or not. And
 % whether it contains the columns "Name" and "Matched_Points" columns.
 TF = false;
@@ -267,7 +235,7 @@ else
 end
 end
 
-function TF = validateRtInfo(rtRaw_Curr2Global)
+function TF = validateRTCurr2Global(rtRaw_Curr2Global)
 % This function is going to test whether the variable is a table or not. Also,
 % it will check the fields of the table too.
 TF = false;
