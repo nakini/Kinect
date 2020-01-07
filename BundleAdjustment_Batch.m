@@ -40,6 +40,9 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 % 4. ['calibStereo', calibStereo]: Mat-file holding stereo calibration
 % parameters between IR and RGB of the Kinect that was used to collect the data.
 %
+% 5. ['seqViewIDsFlag', seqViewIDsFlag]: Logical value -- If it is true then all
+% the view numbers will be replaced with sequential numbers.
+%
 % OUTPUT(s)
 % =========
 % 1. refinedStruct, rawStruct: These two structs hold the following the refined
@@ -67,6 +70,7 @@ addRequired(p, 'rtRawCurr2Global', @validateRTCurr2Global);
 defaultCalibStereo = ['~/Dropbox/PhD/Data/Calibration/Calibration_20181114/', ...
     'HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
+addParameter(p, 'seqViewIDsFlag', false, @(x) islogical(x));
 
 p.parse(dirStruct, matchPairWise, rtRawCurr2Global, varargin{:});
 disp(p.Results);
@@ -77,7 +81,24 @@ plyFolderName = dirStruct.plyFolderName;
 calibStereo = p.Results.calibStereo;
 matchPairWise = p.Results.matchPairWise;
 rtRawCurr2Global = p.Results.rtRawCurr2Global;
-
+seqViewIDsFlag = p.Results.seqViewIDsFlag;
+% Update the Anchor and Moved view-ids with the sequential numbers. This doesn't
+% improve anything in the optimization, just makes the plots little less
+% cluttered and more attracting.
+if seqViewIDsFlag
+    imgNum = rtRawCurr2Global.ViewId;
+    imgNumsUnq = unique(imgNum);
+    seqNums = 1:length(imgNumsUnq);
+    anchViewIDs = matchPairWise.Anchor_ViewID;
+    movedViewIDs = matchPairWise.Moved_ViewID;
+    for iIN = 1:length(imgNumsUnq)
+        anchViewIDs(anchViewIDs == imgNumsUnq(iIN)) = seqNums(iIN);
+        movedViewIDs(movedViewIDs == imgNumsUnq(iIN)) = seqNums(iIN);
+        imgNum(imgNum == imgNumsUnq(iIN)) = seqNums(iIN);
+    end
+    matchPairWise.Anchor_ViewID = anchViewIDs;
+    matchPairWise.Moved_ViewID = movedViewIDs;
+end
 % Algorithm --------------------------------------------------------------------
 % Create the respective lists that will hold all the 3D and 2D points for all 
 % images.
@@ -161,7 +182,9 @@ for iImPrs = 1:numImgPairs
     xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = ...
         vertcat(pcAnchMtcPts_Global, pcMovedMtcPts_Global);
 end
-
+if seqViewIDsFlag
+    rtRawCurr2Global.ViewId = imgNum;
+end
 % cameraPoses only takes IDs as uint32
 rtRawCurr2Global.ViewId = uint32(rtRawCurr2Global.ViewId);
 
