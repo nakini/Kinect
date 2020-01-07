@@ -43,6 +43,10 @@ function [refinedStruct, rawStruct] = BundleAdjustment_Batch(dirStruct, ...
 % 5. ['seqViewIDsFlag', seqViewIDsFlag]: Logical value -- If it is true then all
 % the view numbers will be replaced with sequential numbers.
 %
+% 6. ['optParamsBA', optParamsBA]: Struct -- It has all the optional parameters
+% for bundleAdjustment() function. To get the valid parameters take a look at
+% the Name|Value pair of bundleAdjustment().
+%
 % OUTPUT(s)
 % =========
 % 1. refinedStruct, rawStruct: These two structs hold the following the refined
@@ -69,8 +73,12 @@ addRequired(p, 'rtRawCurr2Global', @validateRTCurr2Global);
 % Optional Parameters --
 defaultCalibStereo = ['~/Dropbox/PhD/Data/Calibration/Calibration_20181114/', ...
     'HandHeld/Calib_Results_stereo_rgb_to_ir.mat'];
+defaultOptParamsBA = struct('FixedViewIDs', 1,  'RelativeTolerance', 1e-10, ...
+    'MaxIterations', 1000, 'PointsUndistorted', true, 'Verbose', true, ...
+    'AbsoluteTolerance', 0.1);          % Optional Bundle adjustment parameters
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 addParameter(p, 'seqViewIDsFlag', false, @(x) islogical(x));
+addParameter(p, 'optParamsBA', defaultOptParamsBA, @validateOptParamsBA);
 
 p.parse(dirStruct, matchPairWise, rtRawCurr2Global, varargin{:});
 disp(p.Results);
@@ -81,6 +89,7 @@ plyFolderName = dirStruct.plyFolderName;
 calibStereo = p.Results.calibStereo;
 matchPairWise = p.Results.matchPairWise;
 rtRawCurr2Global = p.Results.rtRawCurr2Global;
+optParamsBA = p.Results.optParamsBA;
 seqViewIDsFlag = p.Results.seqViewIDsFlag;
 % Update the Anchor and Moved view-ids with the sequential numbers. This doesn't
 % improve anything in the optimization, just makes the plots little less
@@ -207,8 +216,7 @@ camParams = cameraParameters('IntrinsicMatrix', KK_RGB');
 % In the current scenario, use the R|T's in a table form, intrinsic parameters
 % in the form of "cameraParameters" obj and the 3D points as a Nx3 matrix.
 [xyzRefinedPts,refinedRTs] = bundleAdjustment(xyzRaw_Global, pxlList, ...
-    rtRawCurr2Global, camParams, 'FixedViewIDs', 1,  'RelativeTolerance', 1e-10,...
-    'MaxIterations', 1000, 'PointsUndistorted', true, 'Verbose', true);
+    rtRawCurr2Global, camParams, optParamsBA);
 
 % Outputs
 % =======
@@ -278,5 +286,13 @@ if exist(calibStereo, 'file') == 2
     TF = true;
 else
      error('It should be a valid mat-file');
+end
+end
+
+function TF = validateOptParamsBA(optParamsBA)
+if ~isstruct(optParamsBA)
+    error('Provide a structure with bundleAdjustment() optional parameters');
+else
+    TF = true;
 end
 end
