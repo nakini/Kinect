@@ -58,9 +58,16 @@ dispGraphFlag = p.Results.dispGraphFlag;
 % cell array, we need to convert them into a numbers.
 fileNumbers = str2num(cell2mat(matIncidence.Row));
 matInc = table2array(matIncidence);         % In standard matrix format
-
+graphMI = digraph(matInc);
 if dispGraphFlag
-    plot(digraph(matInc), 'Layout', 'circle');
+    figure(1)
+    plot(graphMI, 'Layout', 'circle');
+    title('All possible paths');
+    
+    TR = shortestpathtree(graphMI,'all', 1);
+    figure(2)
+    p = plot(TR, 'Layout', 'circle');
+    title('Shortest paths');
 end
 
 % The following two will be used to find the index of the the transformation
@@ -74,66 +81,49 @@ anchNums = rtPairWise.Anchor_Num;
 % the numbers and find every possible way to reach the base from the current
 % one.
 allPaths_AllViews = cell(length(fileNumbers)-1, 3);
-allPathsCount = 0;
-for iFN = 2:length(fileNumbers)
-    % Find all possible paths between the current view and the base-view. The
-    % function below will return a cell array with each member representing a
-    % path.
-    allPaths_CurrView = pathbetweennodes(matInc, iFN, 1);   % src = iFN; dest = 1;
+allPaths = size(fileNumbers,1)-1;                   % Total number of views
+for iFN = 2:allPaths+1
+    % Find the shortest paths between the current view and the base-view.
+    allPaths_CurrView = shortestpath(graphMI, iFN, 1);      % Shortest path
     
     % Store the values
     allPaths_AllViews{iFN-1, 1} = fileNumbers(iFN);         % View number
     allPaths_AllViews{iFN-1, 2} = allPaths_CurrView;        % All possible paths for current view
-    allPaths_AllViews{iFN-1, 3} = length(allPaths_CurrView);% Paths count for current view
-    
-    % Update the all paths count in the Graph.
-    allPathsCount = allPathsCount + length(allPaths_CurrView);
+    allPaths_AllViews{iFN-1, 3} = size(allPaths_CurrView,1);% Paths count for current view
 end
-
-allViewIds = zeros(allPathsCount, 1);
-allPairs_R = cell(allPathsCount, 1);
-allPairs_T = cell(allPathsCount, 1);
+allViewIds = zeros(allPaths, 1);
+allPairs_R = cell(allPaths, 1);
+allPairs_T = cell(allPaths, 1);
 
 % Transformation for each Path
 % ============================
 % For each path find out the transformation matrices to the base -- To estimate
 % the transformation, we will append all the tranformation matrices in an order.
-indxAllVids = 1;
 for iView = 1:length(allPaths_AllViews)
-    allPaths_CurrView = allPaths_AllViews{iView, 2};
+    currPathVect = allPaths_AllViews{iView, 2};
     
-    % In each path, we start from the begining node which is the current
-    % view-number and keep appending subsequent node until we reach the end
-    % which will be the base view number.
-    for iCPath = 1:length(allPaths_CurrView)
-        currPathVect = allPaths_CurrView{iCPath};
+    % Current-path will have multiple hops. So, we need to append all the
+    % transformations in an order that comes under the current-view and base
+    % view.
+    tmpRTCurr2Base = struct('R', eye(3,3), 'T', [0, 0, 0]');
+    for iCHop = 1:length(currPathVect)-1
+        indxAnch = anchNums == fileNumbers(currPathVect(iCHop+1));
+        indxMoved = movedNums == fileNumbers(currPathVect(iCHop));
         
-        % Current-path will have multiple hops. So, we need to append all the
-        % transformations in an order that comes under the current-view and base
-        % view.
-        tmpRTCurr2Base = struct('R', eye(3,3), 'T', [0, 0, 0]');
-        for iCHop = 1:length(currPathVect)-1
-            indxAnch = anchNums == fileNumbers(currPathVect(iCHop+1));
-            indxMoved = movedNums == fileNumbers(currPathVect(iCHop));
-            
-            indxCurrView = indxAnch & indxMoved;
-            % Keep updating the transformation matrix as we keep appending the
-            % intermediate hops.
-            rtMoved = struct('R', rtPairWise.Orientation{indxCurrView}', 'T', ...
-                rtPairWise.Location{indxCurrView}');
-            tmpRTCurr2Base = AppendRTs(tmpRTCurr2Base, rtMoved);
-        end
-        
-        % Transformation from current-view to the base
-        allPairs_R{indxAllVids, 1} = tmpRTCurr2Base.R';
-        allPairs_T{indxAllVids, 1} = tmpRTCurr2Base.T';
-        
-        % 1st number is the 'current-view'
-        allViewIds(indxAllVids, 1) = fileNumbers(currPathVect(1));
-            
-        % Go to the next index
-        indxAllVids = indxAllVids + 1;
+        indxCurrView = indxAnch & indxMoved;
+        % Keep updating the transformation matrix as we keep appending the
+        % intermediate hops.
+        rtMoved = struct('R', rtPairWise.Orientation{indxCurrView}', 'T', ...
+            rtPairWise.Location{indxCurrView}');
+        tmpRTCurr2Base = AppendRTs(tmpRTCurr2Base, rtMoved);
     end
+    
+    % Transformation from current-view to the base
+    allPairs_R{iView, 1} = tmpRTCurr2Base.R';
+    allPairs_T{iView, 1} = tmpRTCurr2Base.T';
+    
+    % 1st number is the 'current-view'
+    allViewIds(iView, 1) = fileNumbers(currPathVect(1));
 end
 
 % Output
