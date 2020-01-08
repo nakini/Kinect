@@ -54,6 +54,10 @@ function [matchPairWise, rtPairWise, matIncidence] = EstimateTform_Batch(...
 % 8. ['saveRTFlag', saveRTFlag]: Logical value used to decide whether to store
 % the R|T values into corresponding text files or not.
 %
+% 9. ['nearbyViewsTh', nearbyViewsTh]: Interger value -- This number will define
+% who many near by images are checked with the current image in clockwise and
+% anti-clockwise direction. Default is 4 and max is 10.
+%
 % OUTPUT(s)
 % =========
 % 1. matchPairWise: Mx8 table
@@ -114,6 +118,7 @@ addParameter(p, 'dispFlag', defaultFlags, @validateDispFlag);
 addParameter(p, 'cornerTech', 'SURF', @(x) any(validatestring(x, validCornerTechs)));
 addParameter(p, 'regrigidStruct', defaultRegRigidParams, @(x) isstruct(x));
 addParameter(p, 'saveRTFlag', false, @(x) islogical(x));
+addParameter(p, 'nearbyViewsTh', 4, @(x) isinteger(x) && x < 10)
 
 p.parse(dirStruct, imgNumStruct, varargin{:});
 disp('Given inputs for EstimateTform_Batch() function:');
@@ -130,6 +135,8 @@ dispFlag = p.Results.dispFlag;
 cornerTech = p.Results.cornerTech;
 regrigidStruct = p.Results.regrigidStruct;
 saveRTFlag = p.Results.saveRTFlag;
+nearbyViewsTh = p.Results.nearbyViewsTh;
+
 % If the sub-folder "Relative" doesn't exist then create to store all the
 % pairwise relative transformation matrices.
 rtSubFolderName = [dirName, '/', rtFolderName, '/Relative'];
@@ -161,6 +168,8 @@ while imgNumStruct.startIndx < imgNumStruct.endIndx
 end
 numImgs = length(fileList);             % Total number of images
 imgPairList = nchoosek(fileNumbers, 2); % All possible image pair combinations
+viewIDSeq = 1:numImgs;                  % View numbers 1 through N
+viewIDSeqPairs = nchoosek(viewIDSeq,2); % All possible pairs with seqentail numbers
 numPairs = size(imgPairList, 1);        % Total number of combinations
 matchPtsCount = zeros(numPairs, 1);     % Store matching points
 regRigidError = zeros(numPairs, 1);     % Hold the error from ICP algorithm
@@ -207,6 +216,16 @@ LogInfo(logFileName, logString);
 % Load a pair of images at a time and find the correspondence. The first image
 % will be the anchor image and the 2nd will be the moved point cloud
 for iIP = 1:numPairs
+    % Check whether the movedNum is with in "nearbyViewsTh" images away from the
+    % anchNum in clockwise and anit-clockwise direction. If the movedNum is
+    % beyond the given threshold don't try to match the pairs.
+    anchNumSeq = viewIDSeqPairs(iIP, 1);
+    movedNumSeq = viewIDSeqPairs(iIP, 2);
+    if ~(movedNumSeq-anchNumSeq <= nearbyViewsTh) && ...
+            ~(abs(movedNumSeq-anchNumSeq-numImgs) <= nearbyViewsTh)
+        continue;
+    end
+    
 	anchNum = imgPairList(iIP, 1);
     movedNum = imgPairList(iIP, 2);
     % Save the view-id -- The view ids will the actual number cropped from image
