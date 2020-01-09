@@ -1,4 +1,5 @@
-function rtRawCurr2Base  = ComputeAbsoluteRTs(rtPairWise, matIncidence, varargin)
+function rtRawCurr2Base  = ComputeAbsoluteRTs(rtPairWise, matIncidence, ...
+    matIncidenceWeight, varargin)
 % Here, we are going to read the pair wise transformation matrices which
 % transforms the "moved" pc back to the "anchor", and find out absolute
 % transformation to the "base" pc by appending subsequent transformation
@@ -39,11 +40,12 @@ p.StructExpand = false;             % Accept structure as one element
 % Compulsory parameters --
 addRequired(p, 'rtPairWise', @validateRTPairWise);
 addRequired(p, 'matIncidence', @(x) istable(x));
+addRequired(p, 'matIncidenceWeight', @(x) istable(x));
 
 % Optional parameters --
 addParameter(p, 'dispGraphFlag', 'true', @(x) islogical(x));
 
-p.parse(rtPairWise, matIncidence, varargin{:});
+p.parse(rtPairWise, matIncidence, matIncidenceWeight, varargin{:});
 disp('Given inputs for EstimateTform_Batch() function:');
 disp(p.Results);
 fprintf('\n');
@@ -57,11 +59,12 @@ dispGraphFlag = p.Results.dispGraphFlag;
 % Get all the file numbers and the incidence matrix -- The file names will be
 % cell array, we need to convert them into a numbers.
 fileNumbers = str2num(cell2mat(matIncidence.Row));
-matInc = table2array(matIncidence);         % In standard matrix format
-graphMI = digraph(matInc);
+matInc = table2array(matIncidenceWeight);         % In standard matrix format
+graphMI = digraph(tril(matInc));
 if dispGraphFlag
     figure(1)
-    plot(graphMI, 'Layout', 'circle');
+    graphMI.Nodes.Name = matIncidence.Row;
+    plot(graphMI, 'Layout', 'circle', 'EdgeLabel', graphMI.Edges.Weight);
     title('All possible paths');
     
     TR = shortestpathtree(graphMI,'all', 1);
@@ -84,7 +87,7 @@ allPaths_AllViews = cell(length(fileNumbers)-1, 3);
 allPaths = size(fileNumbers,1)-1;                   % Total number of views
 for iFN = 2:allPaths+1
     % Find the shortest paths between the current view and the base-view.
-    allPaths_CurrView = shortestpath(graphMI, iFN, 1);      % Shortest path
+    allPaths_CurrView = shortestpath(TR, iFN, 1);      % Shortest path
     
     % Store the values
     allPaths_AllViews{iFN-1, 1} = fileNumbers(iFN);         % View number
