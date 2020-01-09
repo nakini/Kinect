@@ -196,12 +196,12 @@ if seqViewIDsFlag
 end
 % Remove extra R|T from the table. %% TODO: need to prunes these values while
 % creating them in "EstimateTform_Batch()" function.
-[~, indxB] = ismember(seqNums, imgNum);
-viewIDs = rtRawCurr2Global.ViewId(indxB);
-matRs = rtRawCurr2Global.Orientation(indxB);
-vectTs = rtRawCurr2Global.Location(indxB);
-rtRawCurr2Global = table(viewIDs, matRs, vectTs, ...
-    'VariableNames', {'ViewId', 'Orientation', 'Location'});
+% [~, indxB] = ismember(seqNums, imgNum);
+% viewIDs = rtRawCurr2Global.ViewId(indxB);
+% matRs = rtRawCurr2Global.Orientation(indxB);
+% vectTs = rtRawCurr2Global.Location(indxB);
+% rtRawCurr2Global = table(viewIDs, matRs, vectTs, ...
+%     'VariableNames', {'ViewId', 'Orientation', 'Location'});
 
 % cameraPoses only takes IDs as uint32
 rtRawCurr2Global.ViewId = uint32(rtRawCurr2Global.ViewId);

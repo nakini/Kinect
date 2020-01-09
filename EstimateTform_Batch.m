@@ -1,4 +1,4 @@
-function [matchPairWise, rtPairWise, matIncidence] = EstimateTform_Batch(...
+function [matchPairWise, rtPairWise, matIncidence, matIncidenceWeight] = EstimateTform_Batch(...
     dirStruct, imgNumStruct, varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
@@ -192,7 +192,8 @@ cNames = "To_" + rcNames;
 cNames = cNames.cellstr;
 matIncidence = array2table(zeros(numImgs, numImgs), 'VariableNames', cNames, ...
     'RowNames', rcNames);
-
+matIncidenceWeight = array2table(zeros(numImgs, numImgs), 'VariableNames', cNames, ...
+    'RowNames', rcNames);
 % If there is only 1 image then then there is no point in finding the matches.
 if numImgs < 2
     disp('Only few images found, so operation aborted');
@@ -221,8 +222,8 @@ for iIP = 1:numPairs
     % beyond the given threshold don't try to match the pairs.
     anchNumSeq = viewIDSeqPairs(iIP, 1);
     movedNumSeq = viewIDSeqPairs(iIP, 2);
-    if ~(movedNumSeq-anchNumSeq <= nearbyViewsTh) && ...
-            ~(abs(movedNumSeq-anchNumSeq-numImgs) <= nearbyViewsTh)
+    numHops = min(movedNumSeq-anchNumSeq, anchNumSeq+numImgs-movedNumSeq);
+    if numHops > nearbyViewsTh
         continue;
     end
     
@@ -317,6 +318,11 @@ for iIP = 1:numPairs
         % Incidence matrix of a directed graph -- As the transformation is from
         % moved-to-anchor, but not the other way around.
         matIncidence(num2str(movedNum), ['To_', num2str(anchNum)]) = {1};
+%         matIncidence(num2str(anchNum), ['To_', num2str(movedNum)]) = {1};
+        
+        matIncidenceWeight(num2str(movedNum), ['To_', num2str(anchNum)]) = ...
+            {1/matchPtsCount(iIP, 1)};
+%         matIncidenceWeight(num2str(anchNum), ['To_', num2str(movedNum)]) = {numHops^2};
     else
         regPairStatus(iIP, 1) = false;
     end
@@ -417,7 +423,7 @@ function [tformPC2toPC1, rmse, regStatus] = FindTransformationPC2toPC1(pcStruct1
 % which, we need at least 3 points. However, to be on safe side, I have used the
 % minimum matched point pair count as 5.
 numMatchPts = size(pcStruct1.matchIndx, 1);
-if numMatchPts < 5
+if numMatchPts < 10
     R = eye(3);
     T = ones(3,1);
     tformPC2toPC1 = struct('R', R, 'T', T);
@@ -476,7 +482,7 @@ function DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved, tformMoved2Anchor)
 % Function to display the anchor and the transformed version of moved point
 % cloud.
 pcMoved_Tformed = TransformPointCloud(pcMoved, tformMoved2Anchor);
-figure();
+figure(10);
 pcshowpair(pcAnch, pcMoved_Tformed);
 legend({pcNameAnch, sprintf('Transformed %s', pcNameMoved)}, 'Interpreter', ...
     'none');
