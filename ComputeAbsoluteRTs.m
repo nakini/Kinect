@@ -17,7 +17,8 @@ function rtRawCurr2Base = ComputeAbsoluteRTs(rtPairWise, matIncidenceWeight, ...
 %   4) Moved_To_Anchor -- Extra info showing "from" numer to "to" number
 %
 % 2. matIncidenceWeighted: MxM table, holding the weighted incedence matrix of a
-% graph, which has a weight assigned in place of successful pair and 0 everywhere.
+% graph, which has a weight assigned in place of successful matched pair and 0
+% everywhere.
 %   1) Columns -- Number of each image along with "To_" as prefix as Matlab
 %   doesn't allow names starting with numbers for "VariableNames".
 %   2) Rows -- Number of each image
@@ -58,18 +59,20 @@ dispGraphFlag = p.Results.dispGraphFlag;
 % Get all the file/view numbers and the incidence matrix -- We might miss the
 % 1st/last view number in the Moved_Num/Achor_Num column of "rtPariWise" data.
 % So better to take a union of these two columns.
-fileNumbers = union(rtPairWise.Anchor_Num, rtPairWise.Moved_Num);
-matInc = table2array(matIncidenceWeight);         % In standard matrix format
-graphMI = digraph(tril(matInc));
+viewIDs = union(rtPairWise.Anchor_Num, rtPairWise.Moved_Num);
+mtxIncidence = table2array(matIncidenceWeight);     % In standard matrix format
+graphMtxInc = digraph(tril(mtxIncidence));          % Directional graph
+shortestPathsToBase = shortestpathtree(graphMtxInc,'all', 1);
+
+% Display the graph if needed
 if dispGraphFlag
     figure(1)
-    graphMI.Nodes.Name = matIncidenceWeight.Row;
-    plot(graphMI, 'Layout', 'circle', 'EdgeLabel', graphMI.Edges.Weight);
+    graphMtxInc.Nodes.Name = matIncidenceWeight.Row;
+    plot(graphMtxInc, 'Layout', 'circle', 'EdgeLabel', graphMtxInc.Edges.Weight);
     title('All possible paths');
     
-    TR = shortestpathtree(graphMI,'all', 1);
     figure(2)
-    p = plot(TR, 'Layout', 'circle');
+    plot(shortestPathsToBase, 'Layout', 'circle');
     title('Shortest paths');
 end
 
@@ -78,25 +81,22 @@ end
 movedNums = rtPairWise.Moved_Num;
 anchNums = rtPairWise.Anchor_Num;
 
-% All Possible Paths
-% ==================
-% Now, we use the 1st fileNumber entry as the "base" and then go through rest of
-% the numbers and find every possible way to reach the base from the current
-% one.
-allPaths_AllViews = cell(length(fileNumbers)-1, 3);
-allPaths = size(fileNumbers,1)-1;                   % Total number of views
-for iFN = 2:allPaths+1
+% Shortes Paths of All Nodes
+% ==========================
+% Now, we use the 1st viewIDs entry as the "base" and then go through rest of
+% the numbers and find the shortest path to reach the base from the current one.
+allPathsCount = size(viewIDs,1)-1;                  % Total number of views
+allShortestPaths = cell(allPathsCount, 2);
+for iVN = 2:allPathsCount+1
     % Find the shortest paths between the current view and the base-view.
-    allPaths_CurrView = shortestpath(TR, iFN, 1);      % Shortest path
-    
+    shortPath_CurrView = shortestpath(shortestPathsToBase, iVN, 1);
     % Store the values
-    allPaths_AllViews{iFN-1, 1} = fileNumbers(iFN);         % View number
-    allPaths_AllViews{iFN-1, 2} = allPaths_CurrView;        % All possible paths for current view
-    allPaths_AllViews{iFN-1, 3} = size(allPaths_CurrView,1);% Paths count for current view
+    allShortestPaths{iVN-1, 1} = viewIDs(iVN);
+    allShortestPaths{iVN-1, 2} = shortPath_CurrView;
 end
-allViewIds = zeros(allPaths, 1);
-allPairs_R = cell(allPaths, 1);
-allPairs_T = cell(allPaths, 1);
+allViews_Id = zeros(allPathsCount, 1);
+allViews_R = cell(allPathsCount, 1);
+allViews_T = cell(allPathsCount, 1);
 
 % Transformation for each Path
 % ============================
@@ -105,39 +105,40 @@ allPairs_T = cell(allPaths, 1);
 % The shortes path algorithms returns the nodes the path from source-to-target.
 % Base on the implementation of appending the transformations, make sure the
 % order is maintained.
-for iView = 1:allPaths
-    currPathVect = allPaths_AllViews{iView, 2};
+for iView = 1:allPathsCount
+    currPathVect = allShortestPaths{iView, 2};
     currPathVect = currPathVect(end:-1:1);  % Append matrcies from base-to-current_view
     
     % Current-path will have multiple hops. So, we need to append all the
     % transformations in an order that comes under the base and current-view.
     tmpRTCurr2Base = struct('R', eye(3,3), 'T', [0, 0, 0]');
     for iCHop = 1:length(currPathVect)-1
-        indxAnch = anchNums == fileNumbers(currPathVect(iCHop));
-        indxMoved = movedNums == fileNumbers(currPathVect(iCHop+1));
-        
+        indxAnch = anchNums == viewIDs(currPathVect(iCHop));
+        indxMoved = movedNums == viewIDs(currPathVect(iCHop+1));
         indxCurrView = find(indxAnch & indxMoved);
+        
         % Keep updating the transformation matrix as we keep appending the
         % intermediate hops.
         rtMoved = struct('R', rtPairWise.Orientation{indxCurrView}', 'T', ...
             rtPairWise.Location{indxCurrView}');
+        % Append the current rtMoved to the temporary "tmpRTCurr2Base".
         tmpRTCurr2Base = AppendRTs(tmpRTCurr2Base, rtMoved);
     end
     % Transformation from current-view to the base
-    allPairs_R{iView, 1} = tmpRTCurr2Base.R';
-    allPairs_T{iView, 1} = tmpRTCurr2Base.T';
+    allViews_R{iView, 1} = tmpRTCurr2Base.R';
+    allViews_T{iView, 1} = tmpRTCurr2Base.T';
     
-    % 1st number is the 'current-view'
-    allViewIds(iView, 1) = fileNumbers(currPathVect(end));
+    % Last number in the "currPathVect" is the 'current-view-id'
+    allViews_Id(iView, 1) = viewIDs(currPathVect(end));
 end
 
 % Output
 % ======
 % Create a table for R|T
-rtRawCurr2Base = table(allViewIds, allPairs_R, allPairs_T, ...
+rtRawCurr2Base = table(allViews_Id, allViews_R, allViews_T, ...
     'VariableNames', {'ViewId', 'Orientation', 'Location'});
 % Also add the base-to-base view-id, orientation, and location.
-rtRawCurr2Base = [{fileNumbers(1), eye(3,3), zeros(1,3)}; rtRawCurr2Base];
+rtRawCurr2Base = [{viewIDs(1), eye(3,3), zeros(1,3)}; rtRawCurr2Base];
 end
 
 %% Input arguments validating functions
