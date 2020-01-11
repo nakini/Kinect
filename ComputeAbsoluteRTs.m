@@ -1,5 +1,5 @@
-function rtRawCurr2Base  = ComputeAbsoluteRTs(rtPairWise, matIncidence, ...
-    matIncidenceWeight, varargin)
+function rtRawCurr2Base = ComputeAbsoluteRTs(rtPairWise, matIncidenceWeight, ...
+    varargin)
 % Here, we are going to read the pair wise transformation matrices which
 % transforms the "moved" pc back to the "anchor", and find out absolute
 % transformation to the "base" pc by appending subsequent transformation
@@ -16,8 +16,8 @@ function rtRawCurr2Base  = ComputeAbsoluteRTs(rtPairWise, matIncidence, ...
 %   3) Location -- Translation vector from moved-to-anchor
 %   4) Moved_To_Anchor -- Extra info showing "from" numer to "to" number
 %
-% 2. matIncidence: MxM table, holding the incedence matrix of a graph, which 
-% has "1" in place of successful pair and 0 everywhere.
+% 2. matIncidenceWeighted: MxM table, holding the weighted incedence matrix of a
+% graph, which has a weight assigned in place of successful pair and 0 everywhere.
 %   1) Columns -- Number of each image along with "To_" as prefix as Matlab
 %   doesn't allow names starting with numbers for "VariableNames".
 %   2) Rows -- Number of each image
@@ -39,13 +39,12 @@ p.StructExpand = false;             % Accept structure as one element
 
 % Compulsory parameters --
 addRequired(p, 'rtPairWise', @validateRTPairWise);
-addRequired(p, 'matIncidence', @(x) istable(x));
 addRequired(p, 'matIncidenceWeight', @(x) istable(x));
 
 % Optional parameters --
 addParameter(p, 'dispGraphFlag', 'true', @(x) islogical(x));
 
-p.parse(rtPairWise, matIncidence, matIncidenceWeight, varargin{:});
+p.parse(rtPairWise, matIncidenceWeight, varargin{:});
 disp('Given inputs for EstimateTform_Batch() function:');
 disp(p.Results);
 fprintf('\n');
@@ -56,14 +55,15 @@ dispGraphFlag = p.Results.dispGraphFlag;
 % Algorithm --------------------------------------------------------------------
 % Data Arrangement
 % ================
-% Get all the file numbers and the incidence matrix -- The file names will be
-% cell array, we need to convert them into a numbers.
-fileNumbers = str2num(cell2mat(matIncidence.Row));
+% Get all the file/view numbers and the incidence matrix -- We might miss the
+% 1st/last view number in the Moved_Num/Achor_Num column of "rtPariWise" data.
+% So better to take a union of these two columns.
+fileNumbers = union(rtPairWise.Anchor_Num, rtPairWise.Moved_Num);
 matInc = table2array(matIncidenceWeight);         % In standard matrix format
 graphMI = digraph(tril(matInc));
 if dispGraphFlag
     figure(1)
-    graphMI.Nodes.Name = matIncidence.Row;
+    graphMI.Nodes.Name = matIncidenceWeight.Row;
     plot(graphMI, 'Layout', 'circle', 'EdgeLabel', graphMI.Edges.Weight);
     title('All possible paths');
     
@@ -102,31 +102,33 @@ allPairs_T = cell(allPaths, 1);
 % ============================
 % For each path find out the transformation matrices to the base -- To estimate
 % the transformation, we will append all the tranformation matrices in an order.
-for iView = 1:length(allPaths_AllViews)
+% The shortes path algorithms returns the nodes the path from source-to-target.
+% Base on the implementation of appending the transformations, make sure the
+% order is maintained.
+for iView = 1:allPaths
     currPathVect = allPaths_AllViews{iView, 2};
+    currPathVect = currPathVect(end:-1:1);  % Append matrcies from base-to-current_view
     
     % Current-path will have multiple hops. So, we need to append all the
-    % transformations in an order that comes under the current-view and base
-    % view.
+    % transformations in an order that comes under the base and current-view.
     tmpRTCurr2Base = struct('R', eye(3,3), 'T', [0, 0, 0]');
     for iCHop = 1:length(currPathVect)-1
-        indxAnch = anchNums == fileNumbers(currPathVect(iCHop+1));
-        indxMoved = movedNums == fileNumbers(currPathVect(iCHop));
+        indxAnch = anchNums == fileNumbers(currPathVect(iCHop));
+        indxMoved = movedNums == fileNumbers(currPathVect(iCHop+1));
         
-        indxCurrView = indxAnch & indxMoved;
+        indxCurrView = find(indxAnch & indxMoved);
         % Keep updating the transformation matrix as we keep appending the
         % intermediate hops.
         rtMoved = struct('R', rtPairWise.Orientation{indxCurrView}', 'T', ...
             rtPairWise.Location{indxCurrView}');
         tmpRTCurr2Base = AppendRTs(tmpRTCurr2Base, rtMoved);
     end
-    
     % Transformation from current-view to the base
     allPairs_R{iView, 1} = tmpRTCurr2Base.R';
     allPairs_T{iView, 1} = tmpRTCurr2Base.T';
     
     % 1st number is the 'current-view'
-    allViewIds(iView, 1) = fileNumbers(currPathVect(1));
+    allViewIds(iView, 1) = fileNumbers(currPathVect(end));
 end
 
 % Output
