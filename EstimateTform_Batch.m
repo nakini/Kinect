@@ -1,4 +1,4 @@
-function [matchPairWise, rtPairWise, matIncidence, matIncidenceWeight] = EstimateTform_Batch(...
+function [matchPairWise, rtPairWise, matIncidenceWeight] = EstimateTform_Batch(...
     dirStruct, imgNumStruct, varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
@@ -55,7 +55,7 @@ function [matchPairWise, rtPairWise, matIncidence, matIncidenceWeight] = Estimat
 % the R|T values into corresponding text files or not.
 %
 % 9. ['nearbyViewsTh', nearbyViewsTh]: Interger value -- This number will define
-% who many near by images are checked with the current image in clockwise and
+% how many near by images are checked with the current image in clockwise and
 % anti-clockwise direction. Default is 4 and max is 10.
 %
 % OUTPUT(s)
@@ -77,8 +77,8 @@ function [matchPairWise, rtPairWise, matIncidence, matIncidenceWeight] = Estimat
 %   2) Orientation -- Rotation matrix w.r.t anchor/pc
 %   3) Translation -- Translation vector w.r.t. anchor image/pc
 %
-% 3. matIncidence: MxM table, it is an incidence matrix which will store 1 for
-% the successful matched pairs.
+% 3. matIncidenceWeight: MxM table, it is an incidence matrix which will store
+% weight for the successful matched pairs.
 %
 % Example(s)
 % ==========
@@ -190,8 +190,6 @@ rtPairWise = cell(numPairs, 5);
 rcNames = string(num2cell(fileNumbers)).cellstr; % Needed a cell of strings
 cNames = "To_" + rcNames;
 cNames = cNames.cellstr;
-matIncidence = array2table(zeros(numImgs, numImgs), 'VariableNames', cNames, ...
-    'RowNames', rcNames);
 matIncidenceWeight = array2table(zeros(numImgs, numImgs), 'VariableNames', cNames, ...
     'RowNames', rcNames);
 % If there is only 1 image then then there is no point in finding the matches.
@@ -313,13 +311,10 @@ for iIP = 1:numPairs
     [tformMoved2Anchor, rmse, regStats] = FindTransformationPC2toPC1(pcStructAnch, ...
         pcStructMoved, regrigidStruct);
     regRigidError(iIP, 1) = rmse;
-    if regStats
+    if regStats && (rmse < 2.5)
         regPairStatus(iIP, 1) = true;
         % Incidence matrix of a directed graph -- As the transformation is from
         % moved-to-anchor, but not the other way around.
-        matIncidence(num2str(movedNum), ['To_', num2str(anchNum)]) = {1};
-%         matIncidence(num2str(anchNum), ['To_', num2str(movedNum)]) = {1};
-        
         matIncidenceWeight(num2str(movedNum), ['To_', num2str(anchNum)]) = ...
             {1/matchPtsCount(iIP, 1)};
 %         matIncidenceWeight(num2str(anchNum), ['To_', num2str(movedNum)]) = {numHops^2};
@@ -346,7 +341,7 @@ for iIP = 1:numPairs
     rtPairWise(iIP, :) = {anchNum, movedNum, tformMoved2Anchor.R', ...
         tformMoved2Anchor.T', rtFromTo};
     % If needed display the point cloud
-    if dispFlag.pcPair == 1
+    if dispFlag.pcPair && regStats
         DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved, tformMoved2Anchor);
     end
 end
