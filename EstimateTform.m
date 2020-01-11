@@ -1,4 +1,4 @@
-function [matchPairWise, rtPairWise, matIncidenceWeight] = EstimateTform_Batch(...
+function [matchPairWise, rtPairWise, matIncidenceWeight] = EstimateTform(...
     dirStruct, imgNumStruct, varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
@@ -82,10 +82,7 @@ function [matchPairWise, rtPairWise, matIncidenceWeight] = EstimateTform_Batch(.
 %
 % Example(s)
 % ==========
-%   dirStruct = struct('dirName', '~/Dropbox/PhD/Data/Data/Alvaro/2017_0825/103/
-%       SampleImages/', 'plyFolderName', 'PCinPLY_woPlane_Testing', 
-%       'rtFolderName', 'PCinXYZNorTri_woPlane_Testing');
-%   mtchPts = EstimateTform_Batch(dirStruct, imgNumStruct);
+%
 
 %-------------------------------------------------------------------------------
 %------------------------------- START -----------------------------------------
