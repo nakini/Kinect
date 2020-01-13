@@ -61,7 +61,7 @@ dispGraphFlag = p.Results.dispGraphFlag;
 % So better to take a union of these two columns.
 viewIDs = union(rtPairWise.Anchor_Num, rtPairWise.Moved_Num);
 mtxIncidence = table2array(matIncidenceWeight);     % In standard matrix format
-graphMtxInc = digraph(tril(mtxIncidence));          % Directional graph
+graphMtxInc = digraph(mtxIncidence);          % Directional graph
 shortestPathsToBase = shortestpathtree(graphMtxInc,'all', 1);
 
 % Display the graph if needed
