@@ -1,5 +1,7 @@
-function [refinedStruct, rawStruct] = BundleAdjustment(dirStruct, ...
+function [refined_XYZ_RT, raw_XYZ_RT] = BundleAdjustment(dirInfo, ...
     matchPairWise, rtRawCurr2Global, varargin)
+% Brief
+% =====
 % In this function, I am going to read all the point clouds along with the RGB
 % images and the pair wise matching pixels and carry out the bundle adjustment
 % to optimize the transformation parameters and the 3D points. This includes the
@@ -7,52 +9,54 @@ function [refinedStruct, rawStruct] = BundleAdjustment(dirStruct, ...
 %
 % INPUT(s)
 % ========
-% 1. dirStruct: Directory structure containing the RGB/Depth images and the
-% corresponding 'ply' files and the 'rt' files.
-%   1) dirName -- Name of the folder containing the depth and RGB images
-%   2) plyFolderName -- Name of the folder relative to 'dirName' containing the
-%   ply files.
-%	3) rtFolderName -- Name of the folder relative to 'dirName' holding all the
-%	text files which contain the R|T information.
+% 1. dirInfo (structure): Directory structure containing the RGB/Depth images
+% and the corresponding 'ply' files and the 'rt' files.
+%   1) dirName (string) -- Name of the folder containing the depth and RGB images
+%   2) plyFolderName (string) -- Name of the folder relative to 'dirName'
+%   containing the ply files.
+%   3) rtFolderName (string) -- Name of the folder relative to 'dirName' holding
+%   all the text files which contain the R|T information.
 %
-% 2. matchPairWise: Mx8 table
-%   1) Anchor, Moved -- Image names of the anchor and moved image, respectively
-%   2) Matched_Points -- Number of matched points of between two images
-%   3) ICP_RMSE -- the "rmse" value from rigid registration
+% 2. matchPairWise (Mx8 table):
+%   1) Anchor, Moved (cell) -- Image numbers of the anchor and moved image in
+%   "string" format, respectively
+%   2) Matched_Points (double) -- Number of matched points of between two images
+%   3) ICP_RMSE (double) -- the "rmse" value from rigid registration
 %   4) PtsPxls_Anch, PtsPxls_Moved -- Matched pixels info of the anchor and the
 %   moved image, respectively. And each element of the column is a structure,
 %   which holds the following fields.
-%       a) indxPC -- Px1 vector of indices of matched 3D points of point cloud
-%       b) pixelsRGB -- Px2 matrix of 2D pixels of matched RGB image
-%   5) Anchor_ViewID, Moved_ViewID -- View ids of anchor and moved pc for each
-%   pair, respectively.
+%       a) indxPC (Px1 integer vector) -- Indices of matched 3D points of PC
+%       b) pixelsRGB (Px2 integer matrix) -- 2D pixels of matched RGB image
+%   5) Anchor_ViewID, Moved_ViewID (double) -- View ids of anchor and moved pc
+%   for each pair, respectively.
 %
-% 3. rtRawCurr2Global: Px3 table
-%   1) ViewId: View-id of each point cloud
-%   2) Orientation: Rotation matrix corresponding to each view
-%   3) Location: Translation of each view
+% 3. rtRawCurr2Global (Px3 table):
+%   1) ViewId (integer) -- View-id of each point cloud
+%   2) Orientation (3x3 double) -- Rotation matrix corresponding to each view
+%   3) Location (1x3 double) -- Translation of each view
 % The last view will have 2 transformations w.r.t to the base -- One through the
 % previous point cloud and the other is direct to the base pc. This will act as
 % a loop closure. All the transformations will transform the points in current
 % view to the base/global coordinate frame, i.e.,
 %       X_g = R*X_curr + T;
 %
-% 4. ['calibStereo', calibStereo]: Mat-file holding stereo calibration
-% parameters between IR and RGB of the Kinect that was used to collect the data.
+% --- Name-Value Pair Arguments ---
+% 'calibStereo' (Mat-file): Stereo calibration parameters between IR and RGB of
+% the Kinect that was used to collect the data.
 %
-% 5. ['seqViewIDsFlag', seqViewIDsFlag]: Logical value -- If it is true then all
-% the view numbers will be replaced with sequential numbers.
+% 'seqViewIDsFlag' (logical): If it is true then all the view numbers will be
+% replaced with sequential numbers.
 %
-% 6. ['optParamsBA', optParamsBA]: Struct -- It has all the optional parameters
-% for bundleAdjustment() function. To get the valid parameters take a look at
-% the Name|Value pair of bundleAdjustment().
+% 'optParamsBA' (structure): It has all the optional parameters for
+% bundleAdjustment() function. To get the valid parameters take a look at the
+% Name|Value pair of bundleAdjustment().
 %
 % OUTPUT(s)
 % =========
-% 1. refinedStruct, rawStruct: These two structs hold the following the refined
-% and non-refined info, respectively. Each structure has:
-%   1) xyz -- Px3 3D points from all views
-%   2) rt -- Px3 table of transformation matrices for all the views
+% 1. refined_XYZ_RT, raw_XYZ_RT (structure): Hold the following refined and non-
+% refined info, respectively. Each structure has:
+%   1) xyz (Px3 double) -- 3D points from all views
+%   2) rt (Px3 table) -- Transformation matrices for all the views
 %
 % Example(s)
 % ==========
@@ -80,12 +84,12 @@ addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 addParameter(p, 'seqViewIDsFlag', false, @(x) islogical(x));
 addParameter(p, 'optParamsBA', defaultOptParamsBA, @validateOptParamsBA);
 
-p.parse(dirStruct, matchPairWise, rtRawCurr2Global, varargin{:});
+p.parse(dirInfo, matchPairWise, rtRawCurr2Global, varargin{:});
 disp(p.Results);
 
 % Store variales into local variables to save typing
-dirName = dirStruct.dirName;
-plyFolderName = dirStruct.plyFolderName;
+dirName = dirInfo.dirName;
+plyFolderName = dirInfo.plyFolderName;
 calibStereo = p.Results.calibStereo;
 matchPairWise = p.Results.matchPairWise;
 rtRawCurr2Global = p.Results.rtRawCurr2Global;
@@ -108,6 +112,7 @@ if seqViewIDsFlag
     matchPairWise.Anchor_ViewID = anchViewIDs;
     matchPairWise.Moved_ViewID = movedViewIDs;
 end
+
 % Algorithm --------------------------------------------------------------------
 % Create the respective lists that will hold all the 3D and 2D points for all 
 % images.
@@ -229,8 +234,8 @@ camParams = cameraParameters('IntrinsicMatrix', KK_RGB');
 
 % Outputs
 % =======
-refinedStruct = struct('xyz', xyzRefinedPts, 'rt', refinedRTs);
-rawStruct = struct('xyz', xyzRaw_Global, 'rt', rtRawCurr2Global);
+refined_XYZ_RT = struct('xyz', xyzRefinedPts, 'rt', refinedRTs);
+raw_XYZ_RT = struct('xyz', xyzRaw_Global, 'rt', rtRawCurr2Global);
 end
 
 %% Input arguments valiating functions
