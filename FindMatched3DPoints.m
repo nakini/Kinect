@@ -40,10 +40,8 @@ function [mtchAnchStct, mtchMovedStct] = FindMatched3DPoints(pcStruct1, ...
 % Get the UV coordinates of those projected points on the RGB images
 rgbK1 = pcStruct1.tformDepth2RGB.KK_RGB;        % Intrinsic parameters
 estimatedUVs1 = ProjectPointsOnImage(pcStruct1.pc.Location, rgbK1);
-estimatedUVs1 = round(estimatedUVs1);
 rgbK2 = pcStruct2.tformDepth2RGB.KK_RGB;        % Intrinsic
 estimatedUVs2 = ProjectPointsOnImage(pcStruct2.pc.Location, rgbK2);
-estimatedUVs2 = round(estimatedUVs2);
 
 % For each given UV point in the RGB frame, find the index of nearest estimated 
 % UV point using some distance threshold with range search. Here, we consider
