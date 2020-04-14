@@ -116,7 +116,7 @@ end
 % Algorithm --------------------------------------------------------------------
 % Create the respective lists that will hold all the 3D and 2D points for all 
 % images.
-totalPts = 2*sum(matchPairWise.Matched_Points); % Total number points from all images
+totalPts = sum(matchPairWise.Matched_Points);   % Total number points from all images
 xyzRaw_Global = zeros(totalPts, 3);             % 3D point list
 pxlList(1, 1:totalPts) = pointTrack;            % 2D pixel list of pointTrack objs
 
@@ -133,7 +133,7 @@ for iImPrs = 1:numImgPairs
     % pairs.
     numMtchPts = matchPairWise.Matched_Points(iImPrs, 1);   % Match point count in the pair
     startIndxMatchPts = endIndxMatchPts + 1;
-    endIndxMatchPts  = endIndxMatchPts + 2*numMtchPts;
+    endIndxMatchPts  = endIndxMatchPts + numMtchPts;
     % Store the start and end index of each range of points obtained from each
     % pair
     viewID_StartEnd_Indx(iImPrs, :) = [iImPrs, startIndxMatchPts, endIndxMatchPts];
@@ -150,12 +150,7 @@ for iImPrs = 1:numImgPairs
         pxlList(1, startIndxMatchPts+iTrk-1) = pointTrack(currViewIDs, ...
             [pxlAnch(iTrk, :); pxlMoved(iTrk, :)]);
     end
-    % As we are including both the "moved" and "acnhor" point clouds, we need
-    % the corresponding pixels too. However, the pixels are the same for both
-    % the point clouds. So, we need to append "the same" pixels once again.
-    pxlList(startIndxMatchPts+numMtchPts:endIndxMatchPts) = ...
-        pxlList(startIndxMatchPts:startIndxMatchPts+numMtchPts-1);
-    
+
     % Read and transform point clouds
     % ===============================
     % Names of the point clouds
@@ -194,19 +189,11 @@ for iImPrs = 1:numImgPairs
     % Camera view -- to -- Global view" which we already have. So, we just need
     % to store the matching 3D point.
     xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = ...
-        vertcat(pcAnchMtcPts_Global, pcMovedMtcPts_Global);
+        (pcAnchMtcPts_Global + pcMovedMtcPts_Global)/2;
 end
 if seqViewIDsFlag
     rtRawCurr2Global.ViewId = imgNum;
 end
-% Remove extra R|T from the table. %% TODO: need to prunes these values while
-% creating them in "EstimateTform_Batch()" function.
-% [~, indxB] = ismember(seqNums, imgNum);
-% viewIDs = rtRawCurr2Global.ViewId(indxB);
-% matRs = rtRawCurr2Global.Orientation(indxB);
-% vectTs = rtRawCurr2Global.Location(indxB);
-% rtRawCurr2Global = table(viewIDs, matRs, vectTs, ...
-%     'VariableNames', {'ViewId', 'Orientation', 'Location'});
 
 % cameraPoses only takes IDs as uint32
 rtRawCurr2Global.ViewId = uint32(rtRawCurr2Global.ViewId);
