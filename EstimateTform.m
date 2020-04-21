@@ -1,5 +1,5 @@
-function [matchPairWise, rtPairWise, matIncidenceWeight] = EstimateTform(...
-    dirStruct, imgNumStruct, varargin)
+function [matchPairWise, rtPairWise, matIncidenceWeight, pcPairWise] = ...
+    EstimateTform(dirStruct, imgNumStruct, varargin)
 % In this function, I am going to read two images from a given folder then
 % estimate the matching between the two using the RGB images. For all the
 % matched pixels I will figure out the corresponding 3D points for each RGB
@@ -172,6 +172,7 @@ matchPtsCount = zeros(numPairs, 1);     % Store matching points
 regRigidError = zeros(numPairs, 1);     % Hold the error from ICP algorithm
 imgName = cell(numPairs, 2);            % Name of matching image pair
 matchPtsPxls = cell(numPairs, 2);       % Holds pair of structures
+pcPairInfo = cell(numPairs, 4);         % Anchor and Moved pc and matched indices
 % For Bundle adjustment, we also need the view-ids which is nothing but a
 % sequential view number.
 viewIDPairs = zeros(numPairs, 2);       % Hold a pair of view IDs
@@ -297,6 +298,8 @@ for iIP = 1:numPairs
         pcStructMoved);
     matchPtsCount(iIP, 1) = size(mtchAnchStct.indxPC, 1);
     matchPtsPxls(iIP, :) = {mtchAnchStct, mtchMovedStct};
+    pcPairInfo(iIP, :) = {pcAnch, pcMoved, mtchAnchStct.indxPC, ...
+        mtchMovedStct.indxPC};
     
     % Find the transformation
     % =======================
@@ -361,6 +364,7 @@ imgName = imgName(regPairStatus, :);
 matchPtsCount = matchPtsCount(regPairStatus, :);
 regRigidError = regRigidError(regPairStatus, :);
 matchPtsPxls = matchPtsPxls(regPairStatus, :);
+pcPairInfo = pcPairInfo(regPairStatus, :);
 viewIDPairs = viewIDPairs(regPairStatus, :);
 rtPairWise = rtPairWise(regPairStatus, :);
 
@@ -377,6 +381,12 @@ matchPairWise = table(imgName(:,1), imgName(:,2), matchPtsCount, regRigidError, 
 rtPairWise = table(cell2mat(rtPairWise(:,1)), cell2mat(rtPairWise(:,2)), rtPairWise(:,3), ...
     rtPairWise(:,4), rtPairWise(:,5), 'VariableNames', {'Anchor_Num', 'Moved_Num', ...
     'Orientation', 'Location', 'Moved_To_Anchor'});
+
+% Create a table for "Anchor" and "Moved" point clouds.
+pcPairWise = table(imgName(:,1), imgName(:,2), pcPairInfo(:,1), pcPairInfo(:,2), ...
+    pcPairInfo(:,3), pcPairInfo(:,4), matchPtsCount, 'VariableNames', ...
+    {'Anchor', 'Moved', 'Anch_PC', 'Moved_PC', 'Anch_PtsIndx', 'Moved_PtsIndx', ...
+    'Matched_Points'});
 end
 
 %%
