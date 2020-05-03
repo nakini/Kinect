@@ -67,11 +67,12 @@ if (nargin < 4 || isempty(imgNumberStruct))
 end
 
 % Make a directory to store the ply files.
-[~, msg, ~] = mkdir([dirName, '/PCinPLY']);
+plyFName = ['/PCinPLY_', datestr(now, 'mm_dd_yyyy')];
+[~, msg, ~] = mkdir([dirName, plyFName]);
 if ~isempty(msg)
     disp(msg);
 end
-[~, msg, ~] = mkdir([dirName,'/PCinXYZNorTri']);
+[~, msg, ~] = mkdir([dirName,'/PCinXYZNorTri_', datestr(now, 'mm_dd_yyyy')]);
 if ~isempty(msg)
     disp(msg);
 end
@@ -146,7 +147,7 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
             error('Kinect type should either v1 or v2');
         end
         
-        fileName = [dirName, '/PCinPLY/', nameWithoutExt];
+        fileName = [dirName, plyFName, '/', nameWithoutExt];
         pcwrite(pointCloud(dataXYZ, 'Color', dataRGB), fileName);
         
         % Create XYZ, Nor and Tri files for each point cloud which could be used
@@ -157,3 +158,7 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
         disp("Couldn't create a point cloud because it's empty.");
     end
 end
+
+% Log the info to a file
+LogInformation(setfield(denoiseParamsStruct, 'imgCount', imgCounts), ...
+    [dirName, plyFName]);
