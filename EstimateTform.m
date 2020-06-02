@@ -175,7 +175,7 @@ matchPtsPxls = cell(numPairs, 2);       % Holds pair of structures
 pcPairInfo = cell(numPairs, 4);         % Anchor and Moved pc and matched indices
 % For Bundle adjustment, we also need the view-ids which is nothing but a
 % sequential view number.
-viewIDPairs = zeros(numPairs, 2);       % Hold a pair of view IDs
+viewIDPairs = zeros(numPairs, 4);       % Pair of view IDs -- Image nums & seq nums
 regPairStatus = false(numPairs,1);      % Keep track of FAILED/SUCCEEDED pairs
 % Store Anch-num, Moved-num, R, T, and "from-to" name. For the 1st images we
 % always assume the the rotation is identity matrix and the translation is zero-
@@ -228,7 +228,7 @@ for iIP = 1:numPairs
     % Save the view-id -- The view ids will the actual number cropped from image
     % name. %%%TODO: If the bundle adjust need sequential numbering scheme then
     % I need to update it.%%%
-    viewIDPairs(iIP, :) = [anchNum, movedNum];
+    viewIDPairs(iIP, :) = [anchNum, movedNum, anchNumSeq, movedNumSeq];
     
     % Read the 1st RGB image & PC
     % ===========================
@@ -374,8 +374,9 @@ rtPairWise = rtPairWise(regPairStatus, :);
 % the matching pixels of anchor and moved pc
 matchPairWise = table(imgName(:,1), imgName(:,2), matchPtsCount, regRigidError, ...
      matchPtsPxls(:,1), matchPtsPxls(:,2), viewIDPairs(:,1), viewIDPairs(:, 2), ...
-     'VariableNames', {'Anchor', 'Moved', 'Matched_Points', 'ICP_RMSE', ...
-     'PtsPxls_Anch', 'PtsPxls_Moved', 'Anchor_ViewID', 'Moved_ViewID'});
+     viewIDPairs(:,3), viewIDPairs(:, 4), 'VariableNames', {'Anchor', 'Moved', ...
+     'Matched_Points', 'ICP_RMSE', 'PtsPxls_Anch', 'PtsPxls_Moved', ...
+     'Anchor_ViewID', 'Moved_ViewID', 'Anchor_ViewID_Sq', 'Moved_ViewID_Sq'});
 
 % Create a table for R|T
 rtPairWise = table(cell2mat(rtPairWise(:,1)), cell2mat(rtPairWise(:,2)), rtPairWise(:,3), ...
