@@ -83,6 +83,7 @@ defaultOptParamsBA = struct('FixedViewIDs', 1,  'RelativeTolerance', 1e-10, ...
 addParameter(p, 'calibStereo', defaultCalibStereo, @validateCalibStereo);
 addParameter(p, 'seqViewIDsFlag', false, @(x) islogical(x));
 addParameter(p, 'optParamsBA', defaultOptParamsBA, @validateOptParamsBA);
+addParameter(p, 'selectPCNum', 0, @(x)isnumeric(x));
 
 p.parse(dirInfo, matchPairWise, rtRawCurr2Global, varargin{:});
 disp(p.Results);
@@ -95,6 +96,8 @@ matchPairWise = p.Results.matchPairWise;
 rtRawCurr2Global = p.Results.rtRawCurr2Global;
 optParamsBA = p.Results.optParamsBA;
 seqViewIDsFlag = p.Results.seqViewIDsFlag;
+selectPCNum = p.Results.selectPCNum;
+
 % Update the Anchor and Moved view-ids with the sequential numbers. This doesn't
 % improve anything in the optimization, just makes the plots little less
 % cluttered and more attracting.
@@ -188,8 +191,15 @@ for iImPrs = 1:numImgPairs
     % coordinate frame and the transformation of each camera is from "Current
     % Camera view -- to -- Global view" which we already have. So, we just need
     % to store the matching 3D point.
-    xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = ...
+    if selectPCNum == 1
+        xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = pcAnchMtcPts_Global;
+    elseif selectPCNum == 2
+        xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = pcMovedMtcPts_Global;
+    else
+        xyzRaw_Global(startIndxMatchPts:endIndxMatchPts, :) = ...
         (pcAnchMtcPts_Global + pcMovedMtcPts_Global)/2;
+    end
+    
 end
 if seqViewIDsFlag
     rtRawCurr2Global.ViewId = imgNum;
