@@ -47,13 +47,13 @@ function [xyzRefined_G, rtRefined_C2G, resnorm, residual, exitflag, output, ...
 numViews = size(rtRawCurr2Global, 1);           % View count
 % Extrinsic parameters of the camera appended in a row --- [roll-1, pitch-1,
 % yaw-1, x-1, y-1, z-1, roll-2, pitch-2, yaw-2, x-2, y-2, z-2, roll-3 ...]
-rtG2C_Init = zeros(1, numViews*6);      % 3 for angles + 3 locations
+rtG2C_Init = zeros(1, (numViews-1)*6);          % 3 for angles + 3 locations
 currIndx = 1;
-for iNV = 1:numViews
+for iNV = 2:numViews                            % Not going to update the 1st H
     % Get the values of R and T and take a transpose to convert from Matlab way
     % of representation into universal standard form.
-    R = rtRawCurr2Global.Orientation{iNV}';        % Standard format
-    T = rtRawCurr2Global.Location{iNV}';        % Standard format
+    R = rtRawCurr2Global.Orientation{iNV}';     % Standard format R
+    T = rtRawCurr2Global.Location{iNV}';        % Standard format T
     
     % Take the inverse of the transformation matrix.
     R_Global2Curr = R';
@@ -194,8 +194,9 @@ numPoints = sum(matchedPtsCount);       % Total number of points in all views
 % R|T parameters of all views
 rtVect = vectRTXYZ(1:numViews*6);
 rtCell = cell(numViews,2);
+rtCell(1, :) = {eul2rotm([0,0,0]), [0,0,0]'};    % 1st view will be the reference
 currIndx = 1;
-for iNV = 1:numViews
+for iNV = 2:numViews
     tmpRPY = rtVect(1, currIndx:currIndx+2);
     rotMat = eul2rotm(tmpRPY);
     tmpLoc = rtVect(1, currIndx+3:currIndx+5)';
@@ -205,7 +206,7 @@ end
 
 % 3D points
 if xyzFlag == true
-    xyzMat = reshape(vectRTXYZ(6*numViews+1:end), [3, 2*numPoints])';
+    xyzMat = reshape(vectRTXYZ(6*(numViews-1)+1:end), [3, 2*numPoints])';
 else
     xyzMat = reshape(xyz_G_Inp, [3, 2*numPoints])';
 end
