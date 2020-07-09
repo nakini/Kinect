@@ -1,5 +1,5 @@
 function [xyzRefined_G, rtRefined_C2G, resnorm, residual, exitflag, output, ...
-    lambda,jacobian] = BAOptimization(xyzRaw_Global, rtRawCurr2Global, ...
+    lambda,jacobian] = BAOptimization(pcPairWise, rtRawCurr2Global, ...
     matchPairWise, camIntrinsic, xyzFlag)
 % BRIEF
 % =====
@@ -52,7 +52,7 @@ currIndx = 1;
 for iNV = 1:numViews
     % Get the values of R and T and take a transpose to convert from Matlab way
     % of representation into universal standard form.
-    R = rtRawCurr2Global.Rotation{iNV}';        % Standard format
+    R = rtRawCurr2Global.Orientation{iNV}';        % Standard format
     T = rtRawCurr2Global.Location{iNV}';        % Standard format
     
     % Take the inverse of the transformation matrix.
@@ -67,8 +67,24 @@ for iNV = 1:numViews
 end
 
 % Create a long vector will all the 3D points -- [x-1, y-1, z-1, x-2, y-2, z-2,
-% x-3, y-3, z-3, ...]
-xyzVect_Init = reshape(xyzRaw_Global', [1, numel(xyzRaw_Global)]);
+% x-3, y-3, z-3, ...]. Include both Anchor and Moved pcs.
+matchPtsCount = matchPairWise.Matched_Points;
+numPairs = length(matchPtsCount);
+xyzVect_Init = zeros(2*sum(matchPtsCount), 3);        % 2 Pairs of pcs for a pair of images
+currIndx = 1;
+for iNP = 1:numPairs
+    % Anchor pc
+    xyzVect_Init(currIndx:currIndx + matchPtsCount(iNP)-1, :) = ...
+        pcPairWise.Anch_PC{iNP, 1}.Location(pcPairWise.Anch_PtsIndx{iNP,1}, :);
+    currIndx = currIndx + matchPtsCount(iNP);
+    
+    % Moved PC
+    xyzVect_Init(currIndx: currIndx + matchPtsCount(iNP)-1, :) = ...
+        pcPairWise.Moved_PC{iNP, 1}.Location(pcPairWise.Moved_PtsIndx{iNP,1},:);
+    currIndx = currIndx + matchPtsCount(iNP);
+end
+
+xyzVect_Init = reshape(xyzVect_Init', [1, numel(xyzVect_Init)]);
 
 % Number of matched point count per view.
 matchedPtsCount = matchPairWise.Matched_Points';
@@ -79,14 +95,14 @@ if xyzFlag == true
 else
     initial_guess = rtG2C_Init;                 % Only RTs' for experiment purpose
 end
-fun = @(x)ObjectiveFun(initial_guess, matchPairWise, camIntrinsic, xyzVect_Init, ...
-    xyzFlag);
+fun = @(x)ObjectiveFun(x, matchPairWise, camIntrinsic, xyzVect_Init, ...
+    xyzFlag, numViews);
 
 % Optimation options:
 % Algorithm: trust-region-reflective or levenberg-marquardt
 options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt', ...
-    'Display','iter', 'StepTolerance', 1e-10, 'FunctionTolerance', 1e-10, ...
-    'OptimalityTolerance', 1e-10);
+    'Display','iter', 'StepTolerance', 1e-1, 'FunctionTolerance', 1e-1, ...
+    'OptimalityTolerance', 1e-1, 'MaxIterations', 3, 'Diagnostics', 'on');
 
 % Optimization
 [final_vals, resnorm, residual, exitflag, output, lambda,jacobian] = ...
@@ -111,20 +127,20 @@ rtRefined_C2G = table(viewId, rtRefined_C2G(:,1), rtRefined_C2G(:,2), ...
 end
 
 %% Objective Function
-function resError = ObjectiveFun(initial_guess, matchPairWise, camIntrinsic, ...
-    xyz_G_Inp, xyzFlag)
+function resError = ObjectiveFun(x, matchPairWise, camIntrinsic, xyz_G_Inp, ...
+    xyzFlag, numViews)
 % This is where the error matric will be defined given initial guess for the
 % transformation parameters, 3D points and the original pixel coordinates.
 
 % Number of matched point count per view.
 matchedPtsCount = matchPairWise.Matched_Points';
-[rtG2C_Init, xyz_G_Init] = ExtractRTXYZ(initial_guess, matchedPtsCount, ...
-    xyz_G_Inp, xyzFlag);
+[rtG2C_Init, xyz_G_Init] = ExtractRTXYZ(x, matchedPtsCount, xyz_G_Inp, xyzFlag,...
+    numViews);
 
-numPoints = sum(matchedPtsCount);
-resError = zeros(2*numPoints, 2);
-currIndxPC = 1;                             % Point to Anchor region of 1st pair
-currIndxPxls = 1;                           % Point to pixels from 1st Anchor pc
+numPoints = 2*sum(matchedPtsCount);
+resError = zeros(numPoints, 2);
+% currIndxPC = 1;                             % Point to Anchor region of 1st pair
+currIndx = 1;                           % Point to pixels from 1st Anchor pc
 % Find the error for each view pair -- I mean, project the points on both the
 % matched images and find the error in the pixels. Do the same for all the view
 % pairs.
@@ -133,43 +149,46 @@ for iVP = 1:numPairs
     % Total number of matching points in the current view pair and the 3D points
     % visible in the current view-pair
     mtchPairCount = matchedPtsCount(iVP);
-    anchViewId = matchPairWise.Anchor_ViewID(iVP);
-    movedViewId = matchPairWise.Moved_ViewID(iVP);
+    anchViewId = matchPairWise.Anchor_ViewID_Sq(iVP);
+    movedViewId = matchPairWise.Moved_ViewID_Sq(iVP);
     
-    xyzCurrView_inGlobal = xyz_G_Init(currIndxPC:currIndxPC+mtchPairCount-1, :);
-    
-    % Project the 3D points in the global coordiante into the ANCHOR view
-    tformAnch = struct('R', rtG2C_Init{anchViewId,1}, 'T', rtG2C_Init{anchViewId,2});
-    xyz_inCurrView = TransformPointCloud(pointCloud(xyzCurrView_inGlobal), tformAnch);
-    uvAnch = ProjectPointsOnImage(xyz_inCurrView.Location, camIntrinsic);
-    % Residual error from Anchor image --
-    resError(currIndxPxls:currIndxPxls+mtchPairCount-1, :) = ...
-        matchPairWise.PtsPxls_Anch{iVP}.pixelsRGB - uvAnch;
-    currIndxPxls = currIndxPxls+mtchPairCount;  % Point to pixels from Moved pc
-    
-    % Project the 3D points in the global coordiante into the MOVED view
+    % Project the 3D points of Anchor pc in the global coordiante into the MOVED
+    % view
+    xyzAnch_inGlobal = xyz_G_Init(currIndx:currIndx+mtchPairCount-1, :);
     tformMoved = struct('R', rtG2C_Init{movedViewId,1}, 'T', rtG2C_Init{movedViewId,2});
-    xyz_inCurrView = TransformPointCloud(pointCloud(xyzCurrView_inGlobal), tformMoved);
-    uvMoved = ProjectPointsOnImage(xyz_inCurrView.Location, camIntrinsic);
-    % Residual error from Moved image --
-    resError(currIndxPxls:currIndxPxls+mtchPairCount-1, :) = ...
-        matchPairWise.PtsPxls_Moved{iVP}.pixelsRGB - uvMoved;
+    xyzAnch_inCurrView = TransformPointCloud(pointCloud(xyzAnch_inGlobal), tformMoved);
+    uvAnch = ProjectPointsOnImage(xyzAnch_inCurrView.Location, camIntrinsic);
+    % Residual error from Anchor PC and Moved image --
+    resError(currIndx:currIndx+mtchPairCount-1, :) = ...
+        matchPairWise.PtsPxls_Moved{iVP}.pixelsRGB - uvAnch;
+    
+    currIndx = currIndx+mtchPairCount;  % Point to next set of pixels
+    
+    % Project the 3D points of Moved point clouds in the global coordiante into
+    % the ANCHOR view
+    xyzMoved_inGlobal = xyz_G_Init(currIndx:currIndx+mtchPairCount-1, :);
+    tformAnch = struct('R', rtG2C_Init{anchViewId,1}, 'T', rtG2C_Init{anchViewId,2});
+    xyzMoved_inCurrView = TransformPointCloud(pointCloud(xyzMoved_inGlobal), tformAnch);
+    uvMoved = ProjectPointsOnImage(xyzMoved_inCurrView.Location, camIntrinsic);
+    % Residual error from Moved PC and Anchor image --
+    resError(currIndx:currIndx+mtchPairCount-1, :) = ...
+        matchPairWise.PtsPxls_Anch{iVP}.pixelsRGB - uvMoved;
     
     % Point to Anchor region of next pair
-    currIndxPC = currIndxPC + mtchPairCount;    % Point to next pc
-    currIndxPxls = currIndxPxls + mtchPairCount;% Point to anchor pixels of next pc
+    currIndx = currIndx + mtchPairCount;    % Point to next pc
 end
 resError = resError/numPoints;
+disp(sqrt(sum(sum(resError.^2))));
 end
 
 %% Helper Functions
 function [rtCell, xyzMat] = ExtractRTXYZ(vectRTXYZ, matchedPtsCount, xyz_G_Inp, ...
-    xyzFlag)
+    xyzFlag, numViews)
 % This function will only convert the 3D point represented in a long vector into
 % Nx3 vector. It will also convert the RPY-XYZ stored in vector into R|T
 % matrices.
 
-numViews = length(matchedPtsCount);     % Total number of views
+% numViews = length(matchedPtsCount);     % Total number of views
 numPoints = sum(matchedPtsCount);       % Total number of points in all views
 
 % R|T parameters of all views
@@ -186,8 +205,8 @@ end
 
 % 3D points
 if xyzFlag == true
-    xyzMat = reshape(vectRTXYZ(6*numViews+1:end), [3, numPoints])';
+    xyzMat = reshape(vectRTXYZ(6*numViews+1:end), [3, 2*numPoints])';
 else
-    xyzMat = reshape(xyz_G_Inp, [3, numPoints])';
+    xyzMat = reshape(xyz_G_Inp, [3, 2*numPoints])';
 end
 end
