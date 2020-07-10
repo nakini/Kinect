@@ -74,13 +74,35 @@ xyzVect_Init = zeros(2*sum(matchPtsCount), 3);        % 2 Pairs of pcs for a pai
 currIndx = 1;
 for iNP = 1:numPairs
     % Anchor pc
+    % =========
+    anchId = matchPairWise.Anchor_ViewID(iNP);
+    anchIndex = rtRawCurr2Global.ViewId == anchId;
+    
+    % Transform the pc to the global coordinate frame
+    R = rtRawCurr2Global.Orientation{anchIndex}';
+    T = rtRawCurr2Global.Location{anchIndex}';
+    tmpRTCurr2Base = struct('R', R, 'T', T);
+    tmpAPC = pcPairWise.Anch_PC{iNP,1};
+    tmpAPC_G = TransformPointCloud(tmpAPC, tmpRTCurr2Base); % PC in Global frame
+    
     xyzVect_Init(currIndx:currIndx + matchPtsCount(iNP)-1, :) = ...
-        pcPairWise.Anch_PC{iNP, 1}.Location(pcPairWise.Anch_PtsIndx{iNP,1}, :);
+        tmpAPC_G.Location(pcPairWise.Anch_PtsIndx{iNP,1}, :);
     currIndx = currIndx + matchPtsCount(iNP);
     
     % Moved PC
+    % ========
+    movId = matchPairWise.Moved_ViewID(iNP);
+    movIndex = rtRawCurr2Global.ViewId == movId;
+    
+    % Transform the Moved pc to the global frame
+    R = rtRawCurr2Global.Orientation{movIndex}';
+    T = rtRawCurr2Global.Location{movIndex}';
+    tmpRTCurr2Base = struct('R', R, 'T', T);
+    tmpMPC = pcPairWise.Moved_PC{iNP,1};
+    tmpMPC_G = TransformPointCloud(tmpMPC, tmpRTCurr2Base); % PC in Global frame
+    
     xyzVect_Init(currIndx: currIndx + matchPtsCount(iNP)-1, :) = ...
-        pcPairWise.Moved_PC{iNP, 1}.Location(pcPairWise.Moved_PtsIndx{iNP,1},:);
+        tmpMPC_G.Location(pcPairWise.Moved_PtsIndx{iNP,1},:);
     currIndx = currIndx + matchPtsCount(iNP);
 end
 
@@ -101,8 +123,8 @@ fun = @(x)ObjectiveFun(x, matchPairWise, camIntrinsic, xyzVect_Init, ...
 % Optimation options:
 % Algorithm: trust-region-reflective or levenberg-marquardt
 options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt', ...
-    'Display','iter', 'StepTolerance', 1e-1, 'FunctionTolerance', 1e-1, ...
-    'OptimalityTolerance', 1e-1, 'MaxIterations', 3, 'Diagnostics', 'on');
+    'Display','iter', 'StepTolerance', 1e-10, 'FunctionTolerance', 1e-10, ...
+    'OptimalityTolerance', 1e-10, 'MaxIterations', 3, 'Diagnostics', 'on');
 
 % Optimization
 [final_vals, resnorm, residual, exitflag, output, lambda,jacobian] = ...
@@ -178,7 +200,7 @@ for iVP = 1:numPairs
     currIndx = currIndx + mtchPairCount;    % Point to next pc
 end
 resError = resError/numPoints;
-disp(sqrt(sum(sum(resError.^2))));
+% disp(sqrt(sum(sum(resError.^2))));
 end
 
 %% Helper Functions
