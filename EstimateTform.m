@@ -180,7 +180,7 @@ regPairStatus = false(numPairs,1);      % Keep track of FAILED/SUCCEEDED pairs
 % Store Anch-num, Moved-num, R, T, and "from-to" name. For the 1st images we
 % always assume the the rotation is identity matrix and the translation is zero-
 % vector.
-rtPairWise = cell(numPairs, 5);
+rtPairWise = cell(numPairs, 7);
 % Incidence matrix of a graph to hold all the successful pair-wise connections.
 % The row and column name of the table will be the image names. And, as this is
 % an undirected graph, it will an symmetric matrix. Also, keep in mind that the
@@ -338,8 +338,8 @@ for iIP = 1:numPairs
     % the "Transpose" of the matrices and vectors, such that:
     %       [x y z] = [X Y Z]*R' + t'
     % where, R is a 3x3 matrix and t is a 3x1 vector.
-    rtPairWise(iIP, :) = {anchNum, movedNum, tformMoved2Anchor.R', ...
-        tformMoved2Anchor.T', rtFromTo};
+    rtPairWise(iIP, :) = {anchNum, movedNum, anchNumSeq, movedNumSeq, ...
+        tformMoved2Anchor.R', tformMoved2Anchor.T', rtFromTo};
     % If needed display the point cloud
     if dispFlag.pcPair && regStats
         DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved, tformMoved2Anchor);
@@ -379,8 +379,9 @@ matchPairWise = table(imgName(:,1), imgName(:,2), matchPtsCount, regRigidError, 
      'Anchor_ViewID_Sq', 'Moved_ViewID_Sq', 'Anchor_ViewID', 'Moved_ViewID'});
 
 % Create a table for R|T
-rtPairWise = table(cell2mat(rtPairWise(:,1)), cell2mat(rtPairWise(:,2)), rtPairWise(:,3), ...
-    rtPairWise(:,4), rtPairWise(:,5), 'VariableNames', {'Anchor_Num', 'Moved_Num', ...
+rtPairWise = table(cell2mat(rtPairWise(:,1)), cell2mat(rtPairWise(:,2)), ...
+    rtPairWise(:,3), rtPairWise(:,4), rtPairWise(:,5), rtPairWise(:,6), rtPairWise(:,7), ...
+    'VariableNames', {'Anchor_Num', 'Moved_Num', 'Anchor_Num_Sq', 'Moved_Num_Sq', ...
     'Orientation', 'Location', 'Moved_To_Anchor'});
 
 % Create a table for "Anchor" and "Moved" point clouds.
