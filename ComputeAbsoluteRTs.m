@@ -85,7 +85,7 @@ anchNums = rtPairWise.Anchor_Num;
 % ==========================
 % Now, we use the 1st viewIDs entry as the "base" and then go through rest of
 % the numbers and find the shortest path to reach the base from the current one.
-allPathsCount = size(viewIDs,1)-1;                  % Total number of views
+allPathsCount = length(viewIDs)-1;                  % Total number of views
 allShortestPaths = cell(allPathsCount, 2);
 for iVN = 2:allPathsCount+1
     % Find the shortest paths between the current view and the base-view.
