@@ -48,7 +48,9 @@ numViews = size(rtRawCurr2Global, 1);           % View count
 % Extrinsic parameters of the camera appended in a row --- [roll-1, pitch-1,
 % yaw-1, x-1, y-1, z-1, roll-2, pitch-2, yaw-2, x-2, y-2, z-2, roll-3 ...]
 rtG2C_Init = zeros(1, (numViews-1)*6);          % 3 for angles + 3 locations
-currIndx = 1;
+quatG2C_Init = zeros(1, (numViews-1)*6);        % 4 quarternions + 3 locations
+currIndxRT = 1;
+currIndxQ = 1;
 for iNV = 2:numViews                            % Not going to update the 1st H
     % Get the values of R and T and take a transpose to convert from Matlab way
     % of representation into universal standard form.
@@ -62,8 +64,14 @@ for iNV = 2:numViews                            % Not going to update the 1st H
     % Convert the rotation into RPY and store it along with T in a vector form
     tmpRPY = rotm2eul(R_Global2Curr);
     tmpLoc = T_Global2Curr';
-    rtG2C_Init(1, currIndx:currIndx+5) = [tmpRPY, tmpLoc];
-    currIndx = currIndx + 6;
+    tmpQ = rotm2quat(R_Global2Curr);
+    % TODO: All my derivations are a w.r.t. [x y z w]. However, the standard is
+    % [w x y z]. NEED TO FIX IT.
+    tmpQ = [tmpQ(2:4), tmpQ(1)];
+    rtG2C_Init(1, currIndxRT:currIndxRT+5) = [tmpRPY, tmpLoc];  % RPY & T
+    currIndxRT = currIndxRT + 6;
+    quatG2C_Init(1, currIndxQ:currIndxQ+6) = [tmpQ, tmpLoc];    % Quat & T
+    currIndxQ = currIndxQ + 7;
 end
 
 % Create a long vector will all the 3D points -- [x-1, y-1, z-1, x-2, y-2, z-2,
@@ -113,12 +121,16 @@ matchedPtsCount = matchPairWise.Matched_Points';
 
 % Optimzation objective function and initial guess parameters
 if xyzFlag == true
-    initial_guess = [rtG2C_Init, xyzVect_Init]; % Has both XYZs' and RTs'
+    initial_guess_RPY = [rtG2C_Init, xyzVect_Init]; % Has both XYZs' and RTs'
+    initial_guess_Q = [quatG2C_Init, xyzVect_Init];
 else
-    initial_guess = rtG2C_Init;                 % Only RTs' for experiment purpose
+    % for experiment purpose
+    initial_guess_RPY = rtG2C_Init;                 % Only RTs'
+    initial_guess_Q = quatG2C_Init;                 % Quaternions and Translations
 end
+rotFlag = 2;
 fun = @(x)ObjectiveFun(x, matchPairWise, camIntrinsic, xyzVect_Init, ...
-    xyzFlag, numViews);
+    xyzFlag, numViews, rotFlag);
 
 % Optimation options:
 % Algorithm: trust-region-reflective or levenberg-marquardt
@@ -127,12 +139,21 @@ options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt', ...
     'OptimalityTolerance', 1e-10, 'MaxIterations', 3, 'Diagnostics', 'on');
 
 % Optimization
-[final_vals, resnorm, residual, exitflag, output, lambda,jacobian] = ...
-    lsqnonlin(fun, initial_guess, [], [], options);
-
-% Convert the output vector into R|T table and XYZ matrix.
-[rtRefined_G2C, xyzRefined_G] = ExtractRTXYZ(final_vals, matchedPtsCount, ...
-    xyzVect_Init, xyzFlag);
+if rotFlag == 1
+    [final_vals, resnorm, residual, exitflag, output, lambda,jacobian] = ...
+        lsqnonlin(fun, initial_guess_RPY, [], [], options);
+    
+    % Convert the output vector into R|T table and XYZ matrix.
+    [rtRefined_G2C, xyzRefined_G] = ExtractRTXYZ(final_vals, matchedPtsCount, ...
+        xyzVect_Init, xyzFlag, numViews);
+else
+    [final_vals, resnorm, residual, exitflag, output, lambda,jacobian] = ...
+        lsqnonlin(fun, initial_guess_Q, [], [], options);
+    
+    % Convert the output vector into R|T table and XYZ matrix.
+    [rtRefined_G2C, xyzRefined_G] = ExtractQuatXYZ(final_vals, matchedPtsCount, ...
+        xyzVect_Init, xyzFlag, numViews);
+end
 
 % First, take the inverse and then transpose the R|T values so that they will
 % match the Matlab standard.
@@ -149,15 +170,20 @@ rtRefined_C2G = table(viewId, rtRefined_C2G(:,1), rtRefined_C2G(:,2), ...
 end
 
 %% Objective Function
-function resError = ObjectiveFun(x, matchPairWise, camIntrinsic, xyz_G_Inp, ...
-    xyzFlag, numViews)
+function [resError, J] = ObjectiveFun(x, matchPairWise, camIntrinsic, ...
+    xyz_G_Inp, xyzFlag, numViews, RotFlag)
 % This is where the error matric will be defined given initial guess for the
 % transformation parameters, 3D points and the original pixel coordinates.
 
 % Number of matched point count per view.
 matchedPtsCount = matchPairWise.Matched_Points';
-[rtG2C_Init, xyz_G_Init] = ExtractRTXYZ(x, matchedPtsCount, xyz_G_Inp, xyzFlag,...
-    numViews);
+if (RotFlag == 1)
+    [rtG2C_Init, xyz_G_Init] = ExtractRTXYZ(x, matchedPtsCount, xyz_G_Inp, ...
+        xyzFlag,numViews);
+else
+    [rtG2C_Init, xyz_G_Init] = ExtractQuatXYZ(x, matchedPtsCount, xyz_G_Inp, ...
+        xyzFlag,numViews);
+end
 
 numPoints = 2*sum(matchedPtsCount);
 resError = zeros(numPoints, 2);
@@ -201,6 +227,8 @@ for iVP = 1:numPairs
 end
 resError = resError/numPoints;
 % disp(sqrt(sum(sum(resError.^2))));
+
+% Evalute Jacobian at point "X".
 end
 
 %% Helper Functions
@@ -232,4 +260,39 @@ if xyzFlag == true
 else
     xyzMat = reshape(xyz_G_Inp, [3, 2*numPoints])';
 end
+end
+
+function [quatCell, xyzMat] = ExtractQuatXYZ(vectQuatXYZ, matchedPtsCount, ...
+    xyz_G_Inp, xyzFlag, numViews)
+% This function will only convert the 3D point represented in a long vector into
+% Nx3 vector. It will also convert the Quaternion-XYZ stored in vector into R|T
+% matrices.
+
+% numViews = length(matchedPtsCount);     % Total number of views
+numPoints = sum(matchedPtsCount);       % Total number of points in all views
+
+% R|T parameters of all views
+quatVect = vectQuatXYZ(1:numViews*7);
+quatCell = cell(numViews,2);
+quatCell(1, :) = {eul2rotm([0,0,0]), [0,0,0]'};    % 1st view will be the reference
+currIndx = 1;
+for iNV = 2:numViews
+    tmpQuat = quatVect(1, currIndx:currIndx+3);
+    tmpQuat = [tmpQuat(4), tmpQuat(1:3)];
+    rotMat = quat2rotm(tmpQuat);
+    tmpLoc = quatVect(1, currIndx+4:currIndx+6)';
+    currIndx = currIndx + 7;            % Go to next 6 parameters
+    quatCell(iNV, :) = {rotMat, tmpLoc};  % As per the standards
+end
+
+% 3D points
+if xyzFlag == true
+    xyzMat = reshape(vectQuatXYZ(7*(numViews-1)+1:end), [3, 2*numPoints])';
+else
+    xyzMat = reshape(xyz_G_Inp, [3, 2*numPoints])';
+end
+
+end
+
+function Jacobian()
 end
