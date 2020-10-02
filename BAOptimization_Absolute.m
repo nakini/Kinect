@@ -47,11 +47,11 @@ function [xyzRefined_G, rtRefined_C2G, resnorm, residual, exitflag, output, ...
 numViews = size(rtRawCurr2Global, 1);           % View count
 % Extrinsic parameters of the camera appended in a row --- [roll-1, pitch-1,
 % yaw-1, x-1, y-1, z-1, roll-2, pitch-2, yaw-2, x-2, y-2, z-2, roll-3 ...]
-rtG2C_Init = zeros(1, (numViews-1)*6);          % 3 for angles + 3 locations
-quatG2C_Init = zeros(1, (numViews-1)*6);        % 4 quarternions + 3 locations
+rtG2C_Init = zeros(1, numViews*6);          % 3 for angles + 3 locations
+quatG2C_Init = zeros(1, numViews*7);        % 4 quarternions + 3 locations
 currIndxRT = 1;
 currIndxQ = 1;
-for iNV = 2:numViews                            % Not going to update the 1st H
+for iNV = 1:numViews                            % Not going to update the 1st H
     % Get the values of R and T and take a transpose to convert from Matlab way
     % of representation into universal standard form.
     R = rtRawCurr2Global.Orientation{iNV}';     % Standard format R
@@ -134,10 +134,17 @@ fun = @(x)ObjectiveFun(x, matchPairWise, camIntrinsic, xyzVect_Init, ...
 
 % Optimation options:
 % Algorithm: trust-region-reflective or levenberg-marquardt
+jacobianFlag = 1;
+if jacobianFlag == 1
 options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt', ...
     'Display','iter', 'StepTolerance', 1e-10, 'FunctionTolerance', 1e-10, ...
+    'OptimalityTolerance', 1e-10, 'MaxIterations', 3, 'Diagnostics', 'on', ...
+    'SpecifyObjectiveGradient',true);
+else 
+    options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt', ...
+    'Display','iter', 'StepTolerance', 1e-10, 'FunctionTolerance', 1e-10, ...
     'OptimalityTolerance', 1e-10, 'MaxIterations', 3, 'Diagnostics', 'on');
-
+end
 % Optimization
 if rotFlag == 1
     [final_vals, resnorm, residual, exitflag, output, lambda,jacobian] = ...
@@ -187,8 +194,8 @@ end
 
 numPoints = 2*sum(matchedPtsCount);
 resError = zeros(numPoints, 2);
-% currIndxPC = 1;                             % Point to Anchor region of 1st pair
-currIndx = 1;                           % Point to pixels from 1st Anchor pc
+partJ_Pt = zeros(2*numViews*numPoints, numViews*7+3);   % Blockwise elements of Jacobian
+currIndx = 1;                                   % Point to pixels from 1st Anchor pc
 % Find the error for each view pair -- I mean, project the points on both the
 % matched images and find the error in the pixels. Do the same for all the view
 % pairs.
@@ -199,7 +206,10 @@ for iVP = 1:numPairs
     mtchPairCount = matchedPtsCount(iVP);
     anchViewId = matchPairWise.Anchor_ViewID_Sq(iVP);
     movedViewId = matchPairWise.Moved_ViewID_Sq(iVP);
+    viewIdx = [anchViewId, movedViewId];
     
+    % Project Anchor PC
+    % =================
     % Project the 3D points of Anchor pc in the global coordiante into the MOVED
     % view
     xyzAnch_inGlobal = xyz_G_Init(currIndx:currIndx+mtchPairCount-1, :);
@@ -210,8 +220,10 @@ for iVP = 1:numPairs
     resError(currIndx:currIndx+mtchPairCount-1, :) = ...
         matchPairWise.PtsPxls_Moved{iVP}.pixelsRGB - uvAnch;
     
-    currIndx = currIndx+mtchPairCount;  % Point to next set of pixels
+    currIndx = currIndx+mtchPairCount;          % Point to pixels in moved pc
     
+    % Project Moved PC
+    % ================
     % Project the 3D points of Moved point clouds in the global coordiante into
     % the ANCHOR view
     xyzMoved_inGlobal = xyz_G_Init(currIndx:currIndx+mtchPairCount-1, :);
@@ -222,16 +234,35 @@ for iVP = 1:numPairs
     resError(currIndx:currIndx+mtchPairCount-1, :) = ...
         matchPairWise.PtsPxls_Anch{iVP}.pixelsRGB - uvMoved;
     
+    % Jacobian
+    % ========
+    J_OnePair = Jacobian(tformAnch, tformMoved, camIntrinsic, xyzMoved_inGlobal, ...
+        xyzAnch_inGlobal, viewIdx, numViews);
+    rowIdx = (iVP-1)*2*numViews*2*mtchPairCount+1 : iVP*2*numViews*2*mtchPairCount;
+    partJ_Pt(rowIdx, :) = J_OnePair;
+    
     % Point to Anchor region of next pair
-    currIndx = currIndx + mtchPairCount;    % Point to next pc
+    currIndx = currIndx + mtchPairCount;        % Point to next pc
 end
 resError = resError/numPoints;
-% disp(sqrt(sum(sum(resError.^2))));
+resError = sqrt(sum(resError.^2, 2));           % Sum along the rows
+disp(sqrt(sum(resError.^2)));
 
-% Evalute Jacobian at point "X".
+% Create a sparse matrix from the given matrices. We need to create a row,
+% column and a value matrix.
+[rH, cH, vH] = find(partJ_Pt(:, 1:numViews*3));
+[r3D, c3D, v3D] = find(partJ_Pt(:,numViews*3+1:numViews*3+3));
+% c3D = reshape([1:numPoints;1:numPoints], [1, 2*numPoints]);
+spMat_R = 2*numViews*numPoints;
+spMat_C = numViews*7 + numPoints*3;
+J = sparse(horzcat(rH', r3D'), horzcat(cH', c3D'), horzcat(vH', v3D'), ...
+    spMat_R, spMat_C);
 end
 
 %% Helper Functions
+
+% Extract RT and XYZ
+% ~~~~~~~~~~~~~~~~~~
 function [rtCell, xyzMat] = ExtractRTXYZ(vectRTXYZ, matchedPtsCount, xyz_G_Inp, ...
     xyzFlag, numViews)
 % This function will only convert the 3D point represented in a long vector into
@@ -262,6 +293,8 @@ else
 end
 end
 
+% Extract Quaternion and XYZ
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~
 function [quatCell, xyzMat] = ExtractQuatXYZ(vectQuatXYZ, matchedPtsCount, ...
     xyz_G_Inp, xyzFlag, numViews)
 % This function will only convert the 3D point represented in a long vector into
@@ -276,7 +309,7 @@ quatVect = vectQuatXYZ(1:numViews*7);
 quatCell = cell(numViews,2);
 quatCell(1, :) = {eul2rotm([0,0,0]), [0,0,0]'};    % 1st view will be the reference
 currIndx = 1;
-for iNV = 2:numViews
+for iNV = 1:numViews
     tmpQuat = quatVect(1, currIndx:currIndx+3);
     tmpQuat = [tmpQuat(4), tmpQuat(1:3)];
     rotMat = quat2rotm(tmpQuat);
@@ -287,12 +320,82 @@ end
 
 % 3D points
 if xyzFlag == true
-    xyzMat = reshape(vectQuatXYZ(7*(numViews-1)+1:end), [3, 2*numPoints])';
+    xyzMat = reshape(vectQuatXYZ(7*numViews+1:end), [3, 2*numPoints])';
 else
     xyzMat = reshape(xyz_G_Inp, [3, 2*numPoints])';
 end
 
 end
 
-function Jacobian()
+% Jacobian
+% ~~~~~~~~
+function partJ = Jacobian(tform1, tform2, K, pc1, pc2, viewPair, numViews)
+% BRIEF
+%
+% This funcition is going to evaluate the Jacobian matrix of given point could
+% and it's transfromation matrix.
+%
+% INPUT(s):
+%   1) tform1, tform2 [Structure]: 
+%       a) R(3x3): Rotation matrix
+%       b) T(3x1): Translation vector
+%   2) K(3x3): Intrinsic matrix
+%   3) pc1, pc2 (Nx3): Pair of points in global coordinate frame from two views
+%   4) viewPair (1x2): View ids
+
+numPoints = size(pc1, 1);
+partJ = zeros(2*numViews*2*numPoints, numViews*7+3);    % Blockwise elements of Jacobian
+vid1 = viewPair(1);                                     % View ids
+vid2 = viewPair(2);
+
+for pcNum=1:2
+    if pcNum==1
+        pc = pc1;
+        stIdx = 0;
+    else
+        pc = pc2;
+        stIdx = 1;
+    end
+    
+    for ip=1:numPoints
+        % Evaluate derivatives w.r.t R, T and X for each point in pc1
+        df_by_dX1 = DerivativeOf_f(tform1.T, tform1.R, K, pc(ip, :)', 1);
+        df_by_dT1 = -df_by_dX1;
+        
+        df_by_dX2 = DerivativeOf_f(tform2.T, tform2.R, K, pc(ip, :)', 1);
+        df_by_dT2 = -df_by_dX2;
+        
+        df_by_dq_1 = DerivativeOf_f(tform1.T, tform1.R, K, pc(ip, :)', 3);
+        df_by_dq_2 = DerivativeOf_f(tform2.T, tform2.R, K, pc(ip, :)', 3);
+        
+        % Fill up the matrix
+        rowIdx = stIdx*2*numPoints + (ip-1)*2*numViews + (2*vid1-1:2*vid1);
+        partJ(rowIdx, 7*vid1-6:7*vid1-3) = df_by_dq_1;
+        partJ(rowIdx, 7*vid1-2:7*vid1) = df_by_dT1;
+        partJ(rowIdx, 7*numViews+1:7*numViews+3) = df_by_dX1;
+        
+        rowIdx = stIdx*2*numPoints + (ip-1)*2*numViews + (2*vid2-1:2*vid2);
+        partJ(rowIdx, 7*vid2-6:7*vid2-3) = df_by_dq_2;
+        partJ(rowIdx, 7*vid2-2:7*vid2) = df_by_dT2;
+        partJ(rowIdx, 7*numViews+1:7*numViews+3) = df_by_dX2;
+    end
 end
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
