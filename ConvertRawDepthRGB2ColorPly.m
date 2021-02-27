@@ -1,5 +1,5 @@
 function imgCounts = ConvertRawDepthRGB2ColorPly(dirName, maxDepthInMeters, KinectType, ...
-    imgNumberStruct, denoiseParamsStruct, calibStereo)
+    imgNumberStruct, denoiseParamsStruct, calibStereo, mergedImgFlag)
 % This function reads the depth and the corresponding RGB images and creates a
 % colored point cloud. While creating the point cloud it takes care of the noise
 % using a moving window approach.
@@ -38,6 +38,11 @@ if nargin < 3
 end
 
 % Check and if needed, set the default parameters.
+
+if nargin < 7
+    mergedImgFlag = 0;
+end
+
 % Check for the calibration parameters
 if nargin < 6 || isempty(calibStereo)
     calibStereo = ['~/Dropbox/PhD/Data/Calibration/', ...
@@ -99,8 +104,15 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
     elseif (strcmpi(KinectType, 'v2'))      %% KINECT-V2
         depthFileName = sprintf('depthImg_%04d.png', iNTF);
         rgbFileName = sprintf('rgbImg_%04d.jpg', iNTF);
+        
         fullDepthFileName = [dirName, '/', depthFileName];
         fullRGBFileName = [dirName, '/', rgbFileName];
+        
+        if mergedImgFlag == 1
+            
+        
+        end
+        
         % Check whether the file exists or not. If not simply go to the next
         % one. If it is available then process the same.
         if(exist(fullDepthFileName, 'file') == 2)
@@ -121,8 +133,18 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
             tformDepth2RGB.KK_IR = KK_right;
             
             % Now, get the X, Y, Z of each point in a world coordinate frame.
-            [~, dataXYZ, dataRGB] = MapColorFrameToDepthSpace(depthImg, ...
-                rgbImg, tformDepth2RGB, maxDepthInMeters,denoiseParamsStruct);
+            if mergedImgFlag == 1
+                mergedFileName = sprintf('mergedImg_%04d.jpg', iNTF);
+                fullMergedFileName = [dirName, '/', mergedFileName];
+                mergedImg = imread(fullMergedFileName);
+                [~, dataXYZ, dataRGB] = MapColorFrameToDepthSpace(depthImg, ...
+                    rgbImg, tformDepth2RGB, maxDepthInMeters, ...
+                    denoiseParamsStruct, mergedImg);
+            else
+                
+                [~, dataXYZ, dataRGB] = MapColorFrameToDepthSpace(depthImg, ...
+                    rgbImg, tformDepth2RGB, maxDepthInMeters, denoiseParamsStruct);
+            end
             
             % Increment the count
             imgCounts = imgCounts + 1;
