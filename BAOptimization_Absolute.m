@@ -134,16 +134,18 @@ fun = @(x)ObjectiveFun(x, matchPairWise, camIntrinsic, xyzVect_Init, ...
 
 % Optimation options:
 % Algorithm: trust-region-reflective or levenberg-marquardt
-jacobianFlag = 1;
+jacobianFlag = 0;
 if jacobianFlag == 1
-options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt', ...
-    'Display','iter', 'StepTolerance', 1e-10, 'FunctionTolerance', 1e-10, ...
-    'OptimalityTolerance', 1e-10, 'MaxIterations', 3, 'Diagnostics', 'on', ...
-    'SpecifyObjectiveGradient',true);
-else 
+    disp('User defined Jacobian is used');
     options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt', ...
-    'Display','iter', 'StepTolerance', 1e-10, 'FunctionTolerance', 1e-10, ...
-    'OptimalityTolerance', 1e-10, 'MaxIterations', 3, 'Diagnostics', 'on');
+        'Display','iter', 'StepTolerance', 1e-10, 'FunctionTolerance', 1e-10, ...
+        'OptimalityTolerance', 1e-10, 'MaxIterations', 3, 'Diagnostics', 'on', ...
+        'SpecifyObjectiveGradient',true);
+else
+    disp('Jacobian is evaluated by optimizer');
+    options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt', ...
+        'Display','iter', 'StepTolerance', 1e-10, 'FunctionTolerance', 1e-10, ...
+        'OptimalityTolerance', 1e-10, 'MaxIterations', 3, 'Diagnostics', 'on');
 end
 % Optimization
 if rotFlag == 1
@@ -192,10 +194,12 @@ else
         xyzFlag,numViews);
 end
 
+numUnknowns = length(x);                        % Number of unknown parameters
 numPoints = 2*sum(matchedPtsCount);
-resError = zeros(numPoints, 2);
+resError = zeros(2*numPoints,1);
 partJ_Pt = zeros(2*numViews*numPoints, numViews*7+3);   % Blockwise elements of Jacobian
 currIndx = 1;                                   % Point to pixels from 1st Anchor pc
+currIdxXYZ = 1;                                 % For XYZ points
 % Find the error for each view pair -- I mean, project the points on both the
 % matched images and find the error in the pixels. Do the same for all the view
 % pairs.
@@ -212,51 +216,68 @@ for iVP = 1:numPairs
     % =================
     % Project the 3D points of Anchor pc in the global coordiante into the MOVED
     % view
-    xyzAnch_inGlobal = xyz_G_Init(currIndx:currIndx+mtchPairCount-1, :);
+    xyzAnch_inGlobal = xyz_G_Init(currIdxXYZ:currIdxXYZ+mtchPairCount-1, :);
+%     % TODO: NEED TO CHECK WHY I USED movedViewId INSTEAD OF anchorViewID.
     tformMoved = struct('R', rtG2C_Init{movedViewId,1}, 'T', rtG2C_Init{movedViewId,2});
+%     tformMoved = struct('R', rtG2C_Init{anchViewId,1}, 'T', rtG2C_Init{anchViewId,2});
     xyzAnch_inCurrView = TransformPointCloud(pointCloud(xyzAnch_inGlobal), tformMoved);
     uvAnch = ProjectPointsOnImage(xyzAnch_inCurrView.Location, camIntrinsic);
     % Residual error from Anchor PC and Moved image --
-    resError(currIndx:currIndx+mtchPairCount-1, :) = ...
-        matchPairWise.PtsPxls_Moved{iVP}.pixelsRGB - uvAnch;
+    %   tmpError = [u1^2, v1^2; u2^2, v2^2; ...]            % nx2
+    %   resError = [u1^2; v1^2; u2^2; v2^2; ...]            % 2*nx1
+    tmpError = (matchPairWise.PtsPxls_Moved{iVP}.pixelsRGB - uvAnch).^2; % 2xn matrix
+    resError(currIndx:2:currIndx+2*mtchPairCount-1, :) = tmpError(:, 1);
+    resError(currIndx+1:2:currIndx+2*mtchPairCount-1, :) = tmpError(:, 2);
     
-    currIndx = currIndx+mtchPairCount;          % Point to pixels in moved pc
+    currIndx = currIndx+2*mtchPairCount;            % Point to pixels in moved pc
+    currIdxXYZ = currIdxXYZ+mtchPairCount;          % Point to next XYZ points
+    
+    J_Anch = JacobianError(tmpErrorVect, movedViewId, numUnknowns, tformMoved, ...
+        camIntrinsic, xyzAnch_inGlobal);
     
     % Project Moved PC
     % ================
     % Project the 3D points of Moved point clouds in the global coordiante into
     % the ANCHOR view
-    xyzMoved_inGlobal = xyz_G_Init(currIndx:currIndx+mtchPairCount-1, :);
+    xyzMoved_inGlobal = xyz_G_Init(currIdxXYZ:currIdxXYZ+mtchPairCount-1, :);
+%     % TODO: NEED TO CHECK WHY I USED anchorViewID INSTEAD OF movedViewId.
     tformAnch = struct('R', rtG2C_Init{anchViewId,1}, 'T', rtG2C_Init{anchViewId,2});
+%     tformAnch = struct('R', rtG2C_Init{movedViewId,1}, 'T', rtG2C_Init{movedViewId,2});
+    
     xyzMoved_inCurrView = TransformPointCloud(pointCloud(xyzMoved_inGlobal), tformAnch);
     uvMoved = ProjectPointsOnImage(xyzMoved_inCurrView.Location, camIntrinsic);
     % Residual error from Moved PC and Anchor image --
-    resError(currIndx:currIndx+mtchPairCount-1, :) = ...
-        matchPairWise.PtsPxls_Anch{iVP}.pixelsRGB - uvMoved;
+    tmpError = (matchPairWise.PtsPxls_Anch{iVP}.pixelsRGB - uvMoved).^2; % 2xn matrix
+    resError(currIndx:2:currIndx+2*mtchPairCount-1, :) = tmpError(:, 1);
+    resError(currIndx+1:2:currIndx+2*mtchPairCount-1, :) = tmpError(:, 2);
+    J_Moved = JacobianError(tmpErrorVect, anchViewId, numUnknowns, tformAnch, ...
+        camIntrinsic, xyzMoved_inGlobal);
     
     % Jacobian
     % ========
-    J_OnePair = Jacobian(tformAnch, tformMoved, camIntrinsic, xyzMoved_inGlobal, ...
-        xyzAnch_inGlobal, viewIdx, numViews);
-    rowIdx = (iVP-1)*2*numViews*2*mtchPairCount+1 : iVP*2*numViews*2*mtchPairCount;
-    partJ_Pt(rowIdx, :) = J_OnePair;
+%     J_OnePair = Jacobian(tformAnch, tformMoved, camIntrinsic, xyzMoved_inGlobal, ...
+%         xyzAnch_inGlobal, viewIdx, numViews);
+%     rowIdx = (iVP-1)*2*numViews*2*mtchPairCount+1 : iVP*2*numViews*2*mtchPairCount;
+%     partJ_Pt(rowIdx, :) = J_OnePair;
     
     % Point to Anchor region of next pair
-    currIndx = currIndx + mtchPairCount;        % Point to next pc
+    currIndx = currIndx + 2*mtchPairCount;          % Point to next pc
+    currIdxXYZ = currIdxXYZ+mtchPairCount;          % Point to next XYZ points
 end
 resError = resError/numPoints;
 resError = sqrt(sum(resError.^2, 2));           % Sum along the rows
-disp(sqrt(sum(resError.^2)));
+% disp(sqrt(sum(resError.^2)));
 
-% Create a sparse matrix from the given matrices. We need to create a row,
-% column and a value matrix.
-[rH, cH, vH] = find(partJ_Pt(:, 1:numViews*3));
-[r3D, c3D, v3D] = find(partJ_Pt(:,numViews*3+1:numViews*3+3));
-% c3D = reshape([1:numPoints;1:numPoints], [1, 2*numPoints]);
-spMat_R = 2*numViews*numPoints;
-spMat_C = numViews*7 + numPoints*3;
-J = sparse(horzcat(rH', r3D'), horzcat(cH', c3D'), horzcat(vH', v3D'), ...
-    spMat_R, spMat_C);
+% % Create a sparse matrix from the given matrices. We need to create a row,
+% % column and a value matrix.
+% [rH, cH, vH] = find(partJ_Pt(:, 1:numViews*3));
+% [r3D, c3D, v3D] = find(partJ_Pt(:,numViews*3+1:numViews*3+3));
+% % c3D = reshape([1:numPoints;1:numPoints], [1, 2*numPoints]);
+% spMat_R = 2*numViews*numPoints;
+% spMat_C = numViews*7 + numPoints*3;
+% J = sparse(horzcat(rH', r3D'), horzcat(cH', c3D'), horzcat(vH', v3D'), ...
+%     spMat_R, spMat_C);
+J = 0;
 end
 
 %% Helper Functions
@@ -382,7 +403,35 @@ for pcNum=1:2
 end
 end
 
+function J = JacobianError(deltaUV, viewID, unknownVectLen, tform, K, pcXYZ)
+% INPUT(s):
+%   deltaUV (2*nx1) -- [deltaU1; deltaV1; deltaU2; deltaV2; ...]
+%   viewId (scalar) -- The view id w.r.t which all the derivatives are evaluated
+%   unknownVectLen (scalar) -- Number of unknows in the given error functions
+%   tform (structure) - Hold 3x1 Translation matrix and 3x3 Rotation matrix
+%   K (3x3 matrix) -- Camera intrinsic parameters
+%   pcXYZ (nx3) -- 3D point cloud
+%
+% OUTPUT(s):
+%   
 
+numErrPts = size(deltaUV, 1);
+J = zeros(2*numErrPts, unknownVectLen);
+
+numPoints = size(pc1, 1);
+for ip=1:numPoints
+    df_by_dT = DerivativeOf_f(tform.T, tform.R, K, pcXYZ(ip, :)', 2);	% wrt. T
+    df_by_dq = DerivativeOf_f(tform.T, tform.R, K, pcXYZ(ip, :)', 3);	% wrt. q
+    
+    % Concatenate the derivative of q and t so that it becomes 2x7 matrix.
+    df_by_dH = horzcat(df_by_dq, df_by_dT);
+    
+    % Update the appropriate spots in Jacobian matrix.
+    %   i) The rows will be: 2*ip-1:2*ip
+    %   ii) The columns will be: (viewID-1)*7+1:(viewID-1)*7+8
+    J(2*ip-1:2*ip, 7*viewID-6:7*viewID+1) = deltaUV(2*ip-1:2*ip, 1) .* df_by_dH;
+end
+end
 
 
 
