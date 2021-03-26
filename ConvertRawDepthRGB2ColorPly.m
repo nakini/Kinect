@@ -143,7 +143,8 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
             else
                 
                 [~, dataXYZ, dataRGB] = MapColorFrameToDepthSpace(depthImg, ...
-                    rgbImg, tformDepth2RGB, maxDepthInMeters, denoiseParamsStruct);
+                    rgbImg, tformDepth2RGB, maxDepthInMeters, ...
+                    denoiseParamsStruct, []);
             end
             
             % Increment the count
