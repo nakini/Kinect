@@ -1,5 +1,5 @@
 function imgCounts = ConvertRawDepthRGB2ColorPly(dirName, maxDepthInMeters, KinectType, ...
-    imgNumberStruct, denoiseParamsStruct, calibStereo, mergedImgFlag)
+    imgNumberStruct, denoiseParamsStruct, calibStereo, mergedImgFlag, pcMetric)
 % This function reads the depth and the corresponding RGB images and creates a
 % colored point cloud. While creating the point cloud it takes care of the noise
 % using a moving window approach.
@@ -38,6 +38,9 @@ if nargin < 3
 end
 
 % Check and if needed, set the default parameters.
+if nargin < 8
+    pcMetric = 'M';                % Unit of the point cloud is in Meter
+end
 
 if nargin < 7
     mergedImgFlag = 0;
@@ -108,11 +111,6 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
         fullDepthFileName = [dirName, '/', depthFileName];
         fullRGBFileName = [dirName, '/', rgbFileName];
         
-        if mergedImgFlag == 1
-            
-        
-        end
-        
         % Check whether the file exists or not. If not simply go to the next
         % one. If it is available then process the same.
         if(exist(fullDepthFileName, 'file') == 2)
@@ -137,13 +135,12 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
                 mergedFileName = sprintf('mergedImg_%04d.jpg', iNTF);
                 fullMergedFileName = [dirName, '/', mergedFileName];
                 mergedImg = imread(fullMergedFileName);
-                [~, dataXYZ, dataRGB] = MapColorFrameToDepthSpace(depthImg, ...
-                    rgbImg, tformDepth2RGB, maxDepthInMeters, ...
+                [~, dataXYZ, dataRGB, indxValid, dataUV] = MapColorFrameToDepthSpace(...
+                    depthImg, rgbImg, tformDepth2RGB, maxDepthInMeters, ...
                     denoiseParamsStruct, mergedImg);
             else
-                
-                [~, dataXYZ, dataRGB] = MapColorFrameToDepthSpace(depthImg, ...
-                    rgbImg, tformDepth2RGB, maxDepthInMeters, ...
+                [~, dataXYZ, dataRGB, indxValid, dataUV] = MapColorFrameToDepthSpace(...
+                    depthImg, rgbImg, tformDepth2RGB, maxDepthInMeters, ...
                     denoiseParamsStruct, []);
             end
             
@@ -171,7 +168,17 @@ for iNTF=imgNumberStruct.startIndx:imgNumberStruct.samplingRate:imgNumberStruct.
         end
         
         fileName = [dirName, plyFName, '/', nameWithoutExt];
-        pcwrite(pointCloud(dataXYZ, 'Color', dataRGB), fileName);
+        if strcmp(pcMetric, 'CM')
+            % Save the point cloud in Centi-meter
+            pcwrite(pointCloud(dataXYZ*100, 'Color', dataRGB), fileName);
+        elseif strcmp(pcMetric, 'Meter')
+            % Save in Meter
+            pcwrite(pointCloud(dataXYZ*1000, 'Color', dataRGB), fileName);
+        else
+            % Save in Milli-meter
+            pcwrite(pointCloud(dataXYZ, 'Color', dataRGB), fileName);
+        end
+        save(fileName, 'indxValid', 'dataUV');
         
         % Create XYZ, Nor and Tri files for each point cloud which could be used
         % to register to with each other to create a complete 3D point cloud.
