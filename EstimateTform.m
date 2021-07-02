@@ -116,6 +116,7 @@ addParameter(p, 'cornerTech', 'SURF', @(x) any(validatestring(x, validCornerTech
 addParameter(p, 'regrigidStruct', defaultRegRigidParams, @(x) isstruct(x));
 addParameter(p, 'saveRTFlag', false, @(x) islogical(x));
 addParameter(p, 'nearbyViewsTh', 4, @(x) isinteger(x) && x < 10)
+addParameter(p, 'mergedImgFlag', false, @(x) islogical(x));
 
 p.parse(dirStruct, imgNumStruct, varargin{:});
 disp('Given inputs for EstimateTform_Batch() function:');
@@ -133,6 +134,7 @@ cornerTech = p.Results.cornerTech;
 regrigidStruct = p.Results.regrigidStruct;
 saveRTFlag = p.Results.saveRTFlag;
 nearbyViewsTh = p.Results.nearbyViewsTh;
+mergedImgFlag = p.Results.mergedImgFlag;
 
 % If the sub-folder "Relative" doesn't exist then create to store all the
 % pairwise relative transformation matrices.
@@ -154,7 +156,14 @@ imgIndx = 1;                    % Counter
 % the 1st number to complere the loop.
 while imgNumStruct.startIndx < imgNumStruct.endIndx
     imgNum = imgNumStruct.startIndx;
-    rgbName = ['rgbImg_', num2str(imgNum), '.jpg'];
+    if mergedImgFlag == true
+        rgbName = sprintf('mergedImg_%04d.jpg', imgNum);
+        % rgbName = ['mergedImg_', num2str(imgNum), '.jpg'];
+    else
+        rgbName = sprintf('rgbImg_%04d.jpg', imgNum);
+        % rgbName = ['rgbImg_', num2str(imgNum), '.jpg'];
+    end
+    
     rgbFullName = [dirStruct.dirName, '/', rgbName];
     if exist(rgbFullName, 'file') == 2
         fileList{imgIndx} = rgbFullName;
@@ -180,7 +189,7 @@ regPairStatus = false(numPairs,1);      % Keep track of FAILED/SUCCEEDED pairs
 % Store Anch-num, Moved-num, R, T, and "from-to" name. For the 1st images we
 % always assume the the rotation is identity matrix and the translation is zero-
 % vector.
-rtPairWise = cell(numPairs, 5);
+rtPairWise = cell(numPairs, 7);
 % Incidence matrix of a graph to hold all the successful pair-wise connections.
 % The row and column name of the table will be the image names. And, as this is
 % an undirected graph, it will an symmetric matrix. Also, keep in mind that the
@@ -228,7 +237,7 @@ for iIP = 1:numPairs
     % Save the view-id -- The view ids will the actual number cropped from image
     % name. %%%TODO: If the bundle adjust need sequential numbering scheme then
     % I need to update it.%%%
-    viewIDPairs(iIP, :) = [anchNum, movedNum, anchNumSeq, movedNumSeq];
+    viewIDPairs(iIP, :) = [anchNumSeq, movedNumSeq, anchNum, movedNum];
     
     % Read the 1st RGB image & PC
     % ===========================
@@ -237,8 +246,8 @@ for iIP = 1:numPairs
     anchIndx = fileNumbers == anchNum;
     rgbFullNameAnch = fileList{anchIndx};
     rgbImgAnch = imread(rgbFullNameAnch);   % Read 1st image
-    % Read teh 2st point cloud corresponding to the RGB image
-    pcNameAnch = ['depthImg_', num2str(anchNum), '.ply'];
+    % Read the 1st point cloud corresponding to the RGB image
+    pcNameAnch = sprintf('depthImg_%04d.ply', anchNum);
     pcFullNameAnch = [dirName, '/', plyFolderName, '/', pcNameAnch];
     pcAnch = pcread(pcFullNameAnch);        % 1st point cloud
     
@@ -248,13 +257,13 @@ for iIP = 1:numPairs
     % Read the 2nd point cloud
     rgbFullNameMoved = fileList{movedIndx};
     rgbImgMoved = imread(rgbFullNameMoved); % Read 2nd image
-    pcNameMoved = ['depthImg_', num2str(movedNum), '.ply'];
+    pcNameMoved = sprintf('depthImg_%04d.ply', movedNum);
     pcFullNameMoved = [dirName, '/', plyFolderName, '/', pcNameMoved];
     pcMoved = pcread(pcFullNameMoved);      % 2nd point cloud
     
     % Display the image names that were supposed to be matched
-    rgbNameAnch = ['rgbImg_', num2str(anchNum), '.jpg'];
-    rgbNameMoved = ['rgbImg_', num2str(movedNum), '.jpg'];
+    rgbNameAnch = sprintf('rgbImg_%04d.jpg', anchNum);
+    rgbNameMoved = sprintf('rgbImg_%04d.jpg', movedNum);
     imgName{iIP, 1} = num2str(anchNum);    % Store the names
     imgName{iIP, 2} = num2str(movedNum);
     fprintf('Matching -- %s and %s\n', rgbNameAnch, rgbNameMoved);
@@ -270,11 +279,35 @@ for iIP = 1:numPairs
         points2DAnch = [];
         points2DMoved = [];
     elseif strcmpi(cornerTech, 'UserDefined')
-        % In this case, we are not using the any automatic corner detection 
-        % technique. Instead, we are providing the projection of 3D point on the
-        % RGB image as the corner points.
-        points2DAnch = ProjectPCs2RGBImage(pcAnch, tformDepth2RGB);
-        points2DMoved = ProjectPCs2RGBImage(pcMoved, tformDepth2RGB);
+        if mergedImgFlag == true
+            % In this case, we already have the corresponding between the depth
+            % and RGB images. And the rgb image pixel loaction is already saved
+            % in a .mat file. Just need to load the .mat files and create corner
+            % point objects.
+            idxValidMovedName = sprintf('depthImg_%04d.mat', movedNum);
+            idxValidMovedFullName = [dirName, '/', plyFolderName, '/', ...
+                idxValidMovedName];
+            load(idxValidMovedFullName);
+            idxValidMoved = indxValid{1};
+            
+            idxValdiAnchName = sprintf('depthImg_%04d.mat', anchNum);
+            idxValidAnchFullName = [dirName, '/', plyFolderName, '/', ...
+                idxValdiAnchName];
+            load(idxValidAnchFullName);
+            idxValidAnch = indxValid{1};
+            
+            % points2DMoved = cornerPoints(idxValidMoved);
+            % points2DAnch = cornerPoints(idxValidAnch);
+            
+            points2DAnch = ProjectPCs2IRImage(pcAnch, tformDepth2RGB);
+            points2DMoved = ProjectPCs2IRImage(pcMoved, tformDepth2RGB);
+        else
+            % In this case, we are not using the any automatic corner detection
+            % technique. Instead, we are providing the projection of 3D point on
+            % the RGB image as the corner points.
+            points2DAnch = ProjectPCs2RGBImage(pcAnch, tformDepth2RGB);
+            points2DMoved = ProjectPCs2RGBImage(pcMoved, tformDepth2RGB);
+        end
     else
         error('Matching type should be SURF | Harris | UserDefined');
     end
@@ -338,8 +371,8 @@ for iIP = 1:numPairs
     % the "Transpose" of the matrices and vectors, such that:
     %       [x y z] = [X Y Z]*R' + t'
     % where, R is a 3x3 matrix and t is a 3x1 vector.
-    rtPairWise(iIP, :) = {anchNum, movedNum, tformMoved2Anchor.R', ...
-        tformMoved2Anchor.T', rtFromTo};
+    rtPairWise(iIP, :) = {anchNum, movedNum, anchNumSeq, movedNumSeq, ...
+        tformMoved2Anchor.R', tformMoved2Anchor.T', rtFromTo};
     % If needed display the point cloud
     if dispFlag.pcPair && regStats
         DisplayPCs(pcAnch, pcMoved, pcNameAnch, pcNameMoved, tformMoved2Anchor);
@@ -373,14 +406,15 @@ rtPairWise = rtPairWise(regPairStatus, :);
 % Create a table out of "matched point count" and "rmse" along with names and
 % the matching pixels of anchor and moved pc
 matchPairWise = table(imgName(:,1), imgName(:,2), matchPtsCount, regRigidError, ...
-     matchPtsPxls(:,1), matchPtsPxls(:,2), viewIDPairs(:,1), viewIDPairs(:, 2), ...
-     viewIDPairs(:,3), viewIDPairs(:, 4), 'VariableNames', {'Anchor', 'Moved', ...
+     matchPtsPxls(:,1), matchPtsPxls(:,2), viewIDPairs(:,1), viewIDPairs(:,2), ...
+     viewIDPairs(:,3), viewIDPairs(:,4), 'VariableNames', {'Anchor', 'Moved', ...
      'Matched_Points', 'ICP_RMSE', 'PtsPxls_Anch', 'PtsPxls_Moved', ...
-     'Anchor_ViewID', 'Moved_ViewID', 'Anchor_ViewID_Sq', 'Moved_ViewID_Sq'});
+     'Anchor_ViewID_Sq', 'Moved_ViewID_Sq', 'Anchor_ViewID', 'Moved_ViewID'});
 
 % Create a table for R|T
-rtPairWise = table(cell2mat(rtPairWise(:,1)), cell2mat(rtPairWise(:,2)), rtPairWise(:,3), ...
-    rtPairWise(:,4), rtPairWise(:,5), 'VariableNames', {'Anchor_Num', 'Moved_Num', ...
+rtPairWise = table(cell2mat(rtPairWise(:,1)), cell2mat(rtPairWise(:,2)), ...
+    rtPairWise(:,3), rtPairWise(:,4), rtPairWise(:,5), rtPairWise(:,6), rtPairWise(:,7), ...
+    'VariableNames', {'Anchor_Num', 'Moved_Num', 'Anchor_Num_Sq', 'Moved_Num_Sq', ...
     'Orientation', 'Location', 'Moved_To_Anchor'});
 
 % Create a table for "Anchor" and "Moved" point clouds.
@@ -406,15 +440,33 @@ points2D = cornerPoints(rgbUVs);
 end
 
 %%
+function points2D = ProjectPCs2IRImage(pc, tformDepth2RGB)
+% Project the 3D points onto their corresponding RGB images using the intrinsic 
+% and extrinsic matrix of the Kinect IR and RGB camera. We are just assuming
+% that the given point cloud is already in the RGB frame.
+
+% Get the UV values of those projected points on the RGB images
+irUVs = ProjectPointsOnImage(pc.Location, tformDepth2RGB.KK_IR);
+irUVs = round(irUVs);
+
+idxInvalid = find(irUVs(:,1) <= 0 | irUVs(:,1) > 512 | ...
+    irUVs(:,2) <= 0 | irUVs(:,2) > 424);
+irUVs(idxInvalid, :) = repmat([1,1], [size(idxInvalid,1), 1]);
+% Create the point cloud object so that it could be used in feature extraction
+% process.
+points2D = cornerPoints(irUVs);
+end
+
+%%
 function tformDepth2RGB = TformMatFromCalibration(calibStereo)
 % Load the stereo-calibration parameters. If you have Depth-to-RGB then use it
-% directly or else take the inverse of RGB-% to-Depth parameters.
+% directly or else take the inverse of RGB-to-Depth parameters.
 load(calibStereo, 'R', 'T', 'KK_left', 'KK_right');
 % Create as structure that will hold R matrix & T vector and
 % the intrinsic parameters of each camera.
-tformDepth2RGB.R = inv(R);
+tformDepth2RGB.R = inv(R);              % R is from RGB to IR
 % Convert into Centimeters as the PC is into Centimeters
-tformDepth2RGB.T = -inv(R)*T/10;
+tformDepth2RGB.T = -inv(R)*T/1000;
 tformDepth2RGB.KK_RGB = KK_left;
 tformDepth2RGB.KK_IR = KK_right;
 end
