@@ -1,5 +1,5 @@
-function [mergedPC, dataXYZs, dataRGBs] = MapColorFrameToDepthSpace(depthImg, ...
-    rgbImg, tformDepth2RGB, maxDepth, denoiseParams, mergedImg)
+function [mergedPC, dataXYZs, dataRGBs, varargout] = MapColorFrameToDepthSpace(...
+    depthImg, rgbImg, tformDepth2RGB, maxDepth, denoiseParams, mergedImg)
 % In this function, I am going to find out the RGB map(512x424) using the depth
 % image(512x424) and the rgb image(1920x1080). For that, I am going to use the
 % camera calibration parameters I have obtained from the calibraion process.
@@ -36,7 +36,7 @@ function [mergedPC, dataXYZs, dataRGBs] = MapColorFrameToDepthSpace(depthImg, ..
 % If we already have the merged point cloud as an RGB image then just use the
 % RGB values.
 if ~isempty(mergedImg)
-    [X, Y, Z, Rw, Gw, Bw] = Depth2World_v2(depthImg, maxDepth, ...
+    [X, Y, Z, Rw, Gw, Bw, indValid] = Depth2World_v2(depthImg, maxDepth, ...
         denoiseParams.flyWinSize, denoiseParams.flyDistTh, mergedImg, ...
         tformDepth2RGB.KK_IR);
     
@@ -44,6 +44,12 @@ if ~isempty(mergedImg)
     dataRGBs = cat(2, Rw, Gw, Bw);
     
     mergedPC = pointCloud(dataXYZs, 'Color', dataRGBs);
+    if nargout > 3
+        varargout{1} = indValid;
+    end
+    if nargout > 4
+        varargout{2} = [];
+    end
 else
     
     % Get all the pixel coordinates that are in the valid range.
@@ -63,10 +69,15 @@ else
     dataUVs = ProjectPointsOnImage(pcInRGBFrame.Location, tformDepth2RGB.KK_RGB);
     dataUVs = round(dataUVs);
     
+    
     % Get rid of all the points which are out of bound. I mean, remove the pixels
     % which have indices less than 0 or more than 1080(1920).
-    dataUVs(dataUVs(:,2) <= 0, 2) = 1;
-    dataUVs(dataUVs(:,2) >= 1080, 2) = 1080;
+    indxInvalid = dataUVs(:,2) <= 0 | dataUVs(:,2) >= 1080 | ...
+        dataUVs(:,1) <= 0 | dataUVs(:,1) >= 1920;
+%     dataUVs(dataUVs(:,2) <= 0, 2) = 1;
+%     dataUVs(dataUVs(:,2) >= 1080, 2) = 1080;
+    dataUVs = dataUVs(~indxInvalid, :);
+    dataXYZs = dataXYZs(~indxInvalid, :);
     
     % Put the RGB values into a 512x424x3 Color image
     [rCol, cCol, ~] = size(rgbImg);
@@ -81,4 +92,11 @@ else
     % Generate a point cloud
     dataRGBs = cat(2, validR, validG, validB);
     mergedPC = pointCloud(dataXYZs, 'Color', dataRGBs);
+    
+    if nargout > 3
+        varargout{1} = indxColImg;
+    end
+    if nargout > 4
+        varargout{2} = dataUVs;
+    end
 end
